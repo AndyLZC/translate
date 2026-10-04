@@ -1,0 +1,6 @@
+node_modules
+.output
+.wxt
+stats.html
+*.log
+e2e/screenshot.png

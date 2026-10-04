@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme {
+  --color-brand: #4f46e5;
+  --color-brand-hover: #4338ca;
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --bg-muted: #f6f7f9;
+  --fg: #111827;
+  --fg-muted: #6b7280;
+  --border: #e5e7eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111318;
+    --bg-muted: #1a1d24;
+    --fg: #e5e7eb;
+    --fg-muted: #9ca3af;
+    --border: #2b2f38;
+  }
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  margin: 0;
+}

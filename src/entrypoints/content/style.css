@@ -1,0 +1,73 @@
+/* 译文样式：继承原文字体字号，只加一点间距；显示模式和主题由 <html> 上的属性控制 */
+tx-translation {
+  display: block;
+  margin: 0.3em 0 0.1em;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+tx-translation[data-tx-inline] {
+  display: inline;
+  margin: 0 0 0 0.5em;
+}
+tx-translation * {
+  /* 链接等克隆元素保持原样，但别让它们撑出原网站的绝对定位等布局 */
+  position: static !important;
+}
+
+tx-loading {
+  display: inline-block;
+  font-size: 0.85em;
+  opacity: 0.55;
+}
+tx-loading:not([data-tx-retry])::after {
+  content: '翻译中…';
+  animation: tx-pulse 1.2s ease-in-out infinite;
+}
+tx-loading[data-tx-retry] {
+  cursor: pointer;
+  color: #d4380d;
+  text-decoration: underline dotted;
+  opacity: 0.9;
+}
+@keyframes tx-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* ---------- 显示模式 ---------- */
+html[data-tx-mode='original'] tx-translation {
+  display: none !important;
+}
+/* 只显示译文：仅对整块且已翻译完成的段落隐藏原文 */
+html[data-tx-mode='translation'] [data-tx-whole]:has(> tx-translation[data-tx-state='done']) {
+  font-size: 0 !important;
+}
+html[data-tx-mode='translation'] [data-tx-whole]:has(> tx-translation[data-tx-state='done']) > :not(tx-translation) {
+  display: none !important;
+}
+html[data-tx-mode='translation'] tx-translation[data-tx-state='done'] {
+  font-size: var(--tx-fs, 16px) !important;
+  margin: 0;
+}
+html[data-tx-mode='translation'] tx-translation[data-tx-inline] {
+  margin: 0;
+}
+
+/* ---------- 译文主题 ---------- */
+html[data-tx-theme='underline'] tx-translation[data-tx-state='done'] {
+  text-decoration: underline dashed rgba(127, 127, 127, 0.6);
+  text-underline-offset: 0.25em;
+}
+html[data-tx-theme='dim'] tx-translation[data-tx-state='done'] {
+  opacity: 0.72;
+}
+html[data-tx-theme='highlight'] tx-translation[data-tx-state='done'] {
+  background: rgba(255, 213, 79, 0.28);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+html[data-tx-theme='italic'] tx-translation[data-tx-state='done'] {
+  font-style: italic;
+}
