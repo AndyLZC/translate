@@ -59,8 +59,9 @@ export class PageTranslator {
     this.applyAppearance();
     const needRestart =
       old.targetLang !== settings.targetLang ||
-      old.model !== settings.model ||
-      old.baseURL !== settings.baseURL ||
+      old.activeProvider !== settings.activeProvider ||
+      old.providers[old.activeProvider].model !== settings.providers[settings.activeProvider].model ||
+      old.providers[old.activeProvider].baseURL !== settings.providers[settings.activeProvider].baseURL ||
       old.customSiteRules !== settings.customSiteRules ||
       old.customPrompt !== settings.customPrompt ||
       old.glossary !== settings.glossary;

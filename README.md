@@ -7,7 +7,7 @@
 - **省钱省时**：多段合并成一个请求按编号返回；只翻译可视区域（多预留一屏）；已经是目标语言的段落直接跳过；结果缓存在本地
 - **动态页面**：无限滚动、单页应用切换、评论展开等新内容自动翻译，原文变了会重新翻译
 - **站点规则**：X/Twitter、GitHub、Reddit、Hacker News、Wikipedia、Stack Overflow、YouTube 评论有内置规则，可在设置页用 JSON 覆盖或新增
-- **模型**：OpenAI 官方接口，或任何 OpenAI 兼容接口（DeepSeek、OpenRouter、本地 Ollama 等）
+- **多家模型可选**：OpenAI、DeepSeek、Claude（默认 Haiku 4.5）、任意 OpenAI 兼容接口（OpenRouter、本地 Ollama 等）。每家单独保存 Key 和模型，在弹窗或设置页随时切换
 
 ## 安装（开发版）
 
@@ -21,7 +21,7 @@ Chrome：打开 `chrome://extensions` → 开启"开发者模式" → "加载已
 
 Firefox：打开 `about:debugging#/runtime/this-firefox` → "临时载入附加组件" → 选择 `.output/firefox-mv2/manifest.json`。
 
-首次安装会自动打开设置页：填入 OpenAI API Key，点"测试连接"确认可用。
+首次安装会自动打开设置页：在「模型服务」里选一家服务商，填入 API Key，点"测试连接"确认可用，再点"使用 XX"设为当前服务商。
 
 ## 使用
 
@@ -51,7 +51,7 @@ src/
 ├─ background/
 │  ├─ translation-service.ts  # 缓存 → 去重 → 打包 → p-queue 排队限流 → 漏段补翻
 │  ├─ prompt.ts            # 系统提示词、编号打包、解析模型输出
-│  ├─ provider.ts          # 模型接入（Vercel AI SDK）
+│  ├─ providers/           # 模型接入：OpenAI/DeepSeek/自定义走 Vercel AI SDK，Claude 走 Anthropic 官方 SDK
 │  └─ cache.ts             # Dexie (IndexedDB) 翻译缓存
 ├─ content/
 │  ├─ extractor.ts         # 段落识别：块级元素里的连续行内内容 = 一个翻译单元
@@ -69,7 +69,8 @@ src/
 1. **API 只由 background 调用**：避开跨域，API Key 不暴露给网页，所有标签页共用一个请求队列和缓存。
 2. **批量 + 编号**：每个请求默认最多 12 段 / 3000 字符，用 `<seg id="N">` 包裹；返回的段数对不上时，只把漏掉的段落单独重发。
 3. **占位符**：`<a href>链接</a>` → `<x0>链接</x0>`，翻译后还原；模型弄乱标签时退回纯文本，保证页面不坏。
-4. **缓存键**：`hash(提示词版本 + 接口地址 + 模型 + 目标语言 + 系统提示词 + 原文)`，改了术语表或提示词会自动用新缓存。
+4. **缓存键**：`hash(提示词版本 + 服务商 + 接口地址 + 模型 + 目标语言 + 系统提示词 + 原文)`，换模型、改术语表或提示词会自动用新缓存。
+5. **Claude 的参数**：Haiku 4.5 用 temperature；Sonnet 5.5 / Opus 5.5 不接受采样参数，改用 `effort: low`（翻译是简单任务，省时省钱），并在官方地址上开启服务端拒答兜底（`fallbacks: "default"`），被拒的请求由服务端自动换模型重试。
 
 ### 站点规则示例
 

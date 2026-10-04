@@ -1,25 +1,13 @@
-import { generateText } from 'ai';
 import { browser } from 'wxt/browser';
 import * as cache from '@/background/cache';
-import { configError, getModel } from '@/background/provider';
 import { languageName } from '@/background/prompt';
-import { errorMessage, TranslationService, type CompleteFn } from '@/background/translation-service';
+import { complete } from '@/background/providers';
+import { errorMessage, TranslationService } from '@/background/translation-service';
 import { onMessage, sendMessage } from '@/lib/messaging';
-import { DEFAULT_SETTINGS, getSettings, type Settings } from '@/lib/settings';
+import { providerConfigError } from '@/lib/providers';
+import { activeProviderConfig, getSettings, type Settings } from '@/lib/settings';
 
-const REQUEST_TIMEOUT = 90_000;
-
-const complete: CompleteFn = async ({ system, prompt, settings }) => {
-  const { text } = await generateText({
-    model: getModel(settings),
-    system,
-    prompt,
-    temperature: settings.temperature,
-    maxRetries: 2,
-    abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT),
-  });
-  return text;
-};
+const configError = (s: Settings) => providerConfigError(s.activeProvider, activeProviderConfig(s));
 
 export default defineBackground(() => {
   const service = new TranslationService({ getSettings, complete, cache });
@@ -27,8 +15,9 @@ export default defineBackground(() => {
   onMessage('translate', ({ data }) => service.translate(data, configError));
 
   onMessage('testConnection', async ({ data }) => {
-    const settings: Settings = { ...DEFAULT_SETTINGS, ...(await getSettings()), ...data };
-    const err = configError(settings);
+    const settings = await getSettings();
+    const provider = data ?? { type: settings.activeProvider, config: activeProviderConfig(settings) };
+    const err = providerConfigError(provider.type, provider.config);
     if (err) return { ok: false, message: err };
     try {
       const started = Date.now();
@@ -36,6 +25,7 @@ export default defineBackground(() => {
         system: `Translate the user's text into ${languageName(settings.targetLang)}. Output only the translation.`,
         prompt: 'Hello, world! The connection works.',
         settings,
+        provider,
       });
       return { ok: true, message: `连接成功（${Date.now() - started} ms）：${text.trim()}` };
     } catch (e) {

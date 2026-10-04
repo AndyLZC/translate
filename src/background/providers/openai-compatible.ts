@@ -1,0 +1,18 @@
+import { createOpenAI } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import type { CompletionRequest } from './index';
+
+/** OpenAI、DeepSeek 以及任何 OpenAI 兼容接口，通过 Vercel AI SDK 调用 */
+export async function completeOpenAICompatible({ system, prompt, config, baseURL, temperature, signal }: CompletionRequest) {
+  const provider = createOpenAI({ apiKey: config.apiKey || 'none', baseURL });
+  const { text } = await generateText({
+    // 用 Chat Completions 接口：兼容接口普遍只实现了这个
+    model: provider.chat(config.model),
+    system,
+    prompt,
+    temperature,
+    maxRetries: 2,
+    abortSignal: signal,
+  });
+  return text;
+}

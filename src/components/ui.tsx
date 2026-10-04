@@ -18,7 +18,7 @@ export function Button({ variant = 'primary', className, ...p }: ButtonHTMLAttri
   return (
     <button
       className={cn(
-        'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
         VARIANTS[variant],
         className,
       )}

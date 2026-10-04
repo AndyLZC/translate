@@ -1,14 +1,14 @@
 import { storage } from 'wxt/utils/storage';
+import { defaultProviderConfigs, type ProviderConfig, type ProviderType } from './providers';
 
 export type DisplayMode = 'bilingual' | 'translation' | 'original';
 export type TranslationTheme = 'none' | 'underline' | 'dim' | 'highlight' | 'italic';
 
 export interface Settings {
-  /** OpenAI 或兼容接口的 API Key，只存本地，不同步 */
-  apiKey: string;
-  /** 留空表示官方 https://api.openai.com/v1 */
-  baseURL: string;
-  model: string;
+  /** 当前使用的服务商 */
+  activeProvider: ProviderType;
+  /** 每家服务商各自的 Key / 接口地址 / 模型，只存本地，不同步 */
+  providers: Record<ProviderType, ProviderConfig>;
   temperature: number;
   targetLang: string;
   displayMode: DisplayMode;
@@ -33,9 +33,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  apiKey: '',
-  baseURL: '',
-  model: 'gpt-4o-mini',
+  activeProvider: 'openai',
+  providers: defaultProviderConfigs(),
   temperature: 0.2,
   targetLang: 'zh-CN',
   displayMode: 'bilingual',
@@ -56,8 +55,30 @@ export const settingsItem = storage.defineItem<Settings>('local:settings', {
   fallback: DEFAULT_SETTINGS,
 });
 
+/** 第一版只有一组 apiKey/baseURL/model 字段 */
+interface LegacyFields {
+  apiKey?: string;
+  baseURL?: string;
+  model?: string;
+}
+
+/** 补齐缺省值，并把旧版单一配置迁移到对应的服务商 */
+export function normalizeSettings(stored: Partial<Settings> & LegacyFields = {}): Settings {
+  const { apiKey, baseURL, model, ...rest } = stored;
+  const providers = defaultProviderConfigs();
+  for (const [type, cfg] of Object.entries(stored.providers ?? {})) {
+    providers[type as ProviderType] = { ...providers[type as ProviderType], ...cfg };
+  }
+  let activeProvider = stored.activeProvider ?? DEFAULT_SETTINGS.activeProvider;
+  if (!stored.providers && (apiKey || baseURL)) {
+    activeProvider = baseURL ? 'custom' : 'openai';
+    providers[activeProvider] = { apiKey: apiKey ?? '', baseURL: baseURL ?? '', model: model || providers[activeProvider].model };
+  }
+  return { ...DEFAULT_SETTINGS, ...rest, activeProvider, providers };
+}
+
 export async function getSettings(): Promise<Settings> {
-  return { ...DEFAULT_SETTINGS, ...(await settingsItem.getValue()) };
+  return normalizeSettings(await settingsItem.getValue());
 }
 
 export async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
@@ -66,8 +87,18 @@ export async function updateSettings(patch: Partial<Settings>): Promise<Settings
   return next;
 }
 
+/** 只改某一家服务商的部分字段 */
+export async function updateProvider(type: ProviderType, patch: Partial<ProviderConfig>): Promise<Settings> {
+  const cur = await getSettings();
+  return updateSettings({ providers: { ...cur.providers, [type]: { ...cur.providers[type], ...patch } } });
+}
+
+export function activeProviderConfig(s: Settings) {
+  return s.providers[s.activeProvider];
+}
+
 export function watchSettings(cb: (s: Settings) => void) {
-  return settingsItem.watch((v) => cb({ ...DEFAULT_SETTINGS, ...v }));
+  return settingsItem.watch((v) => cb(normalizeSettings(v ?? undefined)));
 }
 
 export const TARGET_LANGUAGES: { code: string; label: string }[] = [

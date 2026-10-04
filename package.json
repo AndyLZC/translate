@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.83",
+    "@anthropic-ai/sdk": "^0.131.0",
     "@webext-core/messaging": "^4.0.0",
     "ai": "^7.0.127",
     "dexie": "^4.4.6",

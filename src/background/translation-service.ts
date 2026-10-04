@@ -49,8 +49,17 @@ export class TranslationService {
 
     const system = buildSystemPrompt(settings);
     const sysHash = await this.deps.cache.hashKey([system]);
+    const provider = settings.providers[settings.activeProvider];
     const keyOf = (text: string) =>
-      this.deps.cache.hashKey([PROMPT_VERSION, settings.baseURL, settings.model, settings.targetLang, sysHash, text]);
+      this.deps.cache.hashKey([
+        PROMPT_VERSION,
+        settings.activeProvider,
+        provider.baseURL,
+        provider.model,
+        settings.targetLang,
+        sysHash,
+        text,
+      ]);
 
     const keys = await Promise.all(req.texts.map(keyOf));
     const cached = await this.deps.cache.getMany(keys);
@@ -165,11 +174,16 @@ export function chunkTexts<T extends { text: string }>(items: T[], maxCount: num
 
 export function errorMessage(e: unknown): string {
   if (e && typeof e === 'object') {
-    const anyE = e as { statusCode?: number; message?: string; responseBody?: string };
-    if (anyE.statusCode === 401) return 'API Key 无效（401）';
-    if (anyE.statusCode === 404) return '接口地址或模型名称不对（404）';
-    if (anyE.statusCode === 429) return '请求太频繁或额度用完（429）';
-    if (anyE.message) return anyE.message;
+    // AI SDK 的错误带 statusCode，Anthropic SDK 的错误带 status
+    const err = e as { statusCode?: number; status?: number; message?: string; name?: string };
+    const status = err.statusCode ?? err.status;
+    if (status === 401) return 'API Key 无效（401）';
+    if (status === 403) return '没有权限使用这个模型（403）';
+    if (status === 404) return '接口地址或模型名称不对（404）';
+    if (status === 429) return '请求太频繁或额度用完（429）';
+    if (status === 529 || status === 503) return '模型服务繁忙，请稍后重试';
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') return '请求超时';
+    if (err.message) return err.message;
   }
   return String(e);
 }

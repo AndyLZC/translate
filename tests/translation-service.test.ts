@@ -24,7 +24,11 @@ function fakeModel(drop: (text: string) => boolean = () => false) {
   );
 }
 
-const settings = { ...DEFAULT_SETTINGS, apiKey: 'k', batchSize: 3 };
+const settings = {
+  ...DEFAULT_SETTINGS,
+  batchSize: 3,
+  providers: { ...DEFAULT_SETTINGS.providers, openai: { apiKey: 'k', baseURL: '', model: 'gpt-4o-mini' } },
+};
 
 describe('TranslationService', () => {
   it('批量翻译、去重、写缓存，第二次直接命中缓存', async () => {
@@ -72,8 +76,8 @@ describe('TranslationService', () => {
 
   it('配置不完整时不发请求', async () => {
     const complete = fakeModel();
-    const svc = new TranslationService({ getSettings: async () => ({ ...settings, apiKey: '' }), complete, cache: memoryCache() });
-    const res = await svc.translate({ texts: ['a'] }, (s) => (s.apiKey ? null : '缺 Key'));
+    const svc = new TranslationService({ getSettings: async () => DEFAULT_SETTINGS, complete, cache: memoryCache() });
+    const res = await svc.translate({ texts: ['a'] }, (s) => (s.providers[s.activeProvider].apiKey ? null : '缺 Key'));
     expect(res).toEqual({ translations: [null], error: '缺 Key' });
     expect(complete).not.toHaveBeenCalled();
   });
@@ -85,6 +89,21 @@ describe('TranslationService', () => {
     expect(a.translations).toEqual(['译:x']);
     expect(b.translations).toEqual(['译:x']);
     expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('换服务商或模型后不复用旧缓存', async () => {
+    const cache = memoryCache();
+    const complete = fakeModel();
+    let current = settings;
+    const svc = new TranslationService({ getSettings: async () => current, complete, cache });
+    await svc.translate({ texts: ['a'] });
+    current = {
+      ...settings,
+      activeProvider: 'anthropic',
+      providers: { ...settings.providers, anthropic: { apiKey: 'k', baseURL: '', model: 'claude-haiku-4-5' } },
+    };
+    await svc.translate({ texts: ['a'] });
+    expect(complete).toHaveBeenCalledTimes(2);
   });
 });
 

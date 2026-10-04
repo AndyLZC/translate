@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Field, Input, Segmented, Select, Switch, Textarea } from '@/components/ui';
 import { sendMessage } from '@/lib/messaging';
-import { TARGET_LANGUAGES, type DisplayMode, type Settings, type TranslationTheme } from '@/lib/settings';
+import { PROVIDERS, providerConfigError, providerPreset, type ProviderType } from '@/lib/providers';
+import { TARGET_LANGUAGES, updateProvider, type DisplayMode, type Settings, type TranslationTheme } from '@/lib/settings';
 import { BUILTIN_SITE_RULES, parseCustomRules } from '@/lib/site-rules';
 import { useSettings } from '@/lib/use-settings';
-
-const MODEL_SUGGESTIONS = ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4.1', 'gpt-5-mini', 'gpt-5-nano'];
 
 const THEMES: { value: TranslationTheme; label: string }[] = [
   { value: 'none', label: '无' },
@@ -58,18 +57,30 @@ function useDraft(value: string) {
 }
 
 function ModelSection({ settings, update }: SectionProps) {
-  const [apiKey, setApiKey] = useDraft(settings.apiKey);
-  const [baseURL, setBaseURL] = useDraft(settings.baseURL);
-  const [model, setModel] = useDraft(settings.model);
+  const [tab, setTab] = useState<ProviderType>(settings.activeProvider);
+  const preset = providerPreset(tab);
+  const cfg = settings.providers[tab];
+  const [apiKey, setApiKey] = useDraft(cfg.apiKey);
+  const [baseURL, setBaseURL] = useDraft(cfg.baseURL);
+  const [model, setModel] = useDraft(cfg.model);
   const [showKey, setShowKey] = useState(false);
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const active = settings.activeProvider === tab;
+  const draft = { apiKey: apiKey.trim(), baseURL: baseURL.trim(), model: model.trim() };
+  const draftError = providerConfigError(tab, draft);
+
+  const switchTab = (t: ProviderType) => {
+    setTab(t);
+    setTest(null);
+    setShowKey(false);
+  };
 
   const runTest = async () => {
     setTesting(true);
     setTest(null);
     try {
-      setTest(await sendMessage('testConnection', { apiKey, baseURL, model }));
+      setTest(await sendMessage('testConnection', { type: tab, config: draft }));
     } catch (e) {
       setTest({ ok: false, message: String(e) });
     } finally {
@@ -77,58 +88,86 @@ function ModelSection({ settings, update }: SectionProps) {
     }
   };
 
+  const activate = async () => {
+    await updateProvider(tab, draft);
+    await update({ activeProvider: tab });
+  };
+
   return (
-    <Card title="模型服务" description="使用 OpenAI 官方接口，或任何 OpenAI 兼容接口（DeepSeek、OpenRouter、本地 Ollama 等，改接口地址即可）。">
-      <Field label="API Key" hint="只保存在本机浏览器里，只会发送给下面的接口地址。">
+    <Card title="模型服务" description="可以同时配置多家服务商，随时切换当前使用哪一家（弹窗里也能切换）。Key 只保存在本机浏览器里，只发送给对应服务商的接口。">
+      <Segmented
+        value={tab}
+        options={PROVIDERS.map((p) => ({
+          value: p.type,
+          label: settings.activeProvider === p.type ? `${p.label} ✓` : p.label,
+        }))}
+        onChange={switchTab}
+      />
+      <p className="text-sm text-[var(--fg-muted)]">{preset.description}</p>
+
+      <Field label="API Key">
         <div className="flex gap-2">
           <Input
             type={showKey ? 'text' : 'password'}
-            placeholder="sk-..."
+            placeholder={preset.keyPlaceholder}
             value={apiKey}
             autoComplete="off"
             onChange={(e) => setApiKey(e.target.value)}
-            onBlur={() => update({ apiKey: apiKey.trim() })}
+            onBlur={() => updateProvider(tab, { apiKey: apiKey.trim() })}
           />
           <Button variant="secondary" type="button" onClick={() => setShowKey(!showKey)}>
             {showKey ? '隐藏' : '显示'}
           </Button>
         </div>
       </Field>
-      <Field label="接口地址" hint="留空为 https://api.openai.com/v1；本地 Ollama 填 http://localhost:11434/v1">
+      <Field label="接口地址" hint={preset.defaultBaseURL ? `留空使用默认地址 ${preset.defaultBaseURL}；用代理或中转时再填` : '必填，例如 https://openrouter.ai/api/v1'}>
         <Input
-          placeholder="https://api.openai.com/v1"
+          placeholder={preset.defaultBaseURL || 'https://.../v1'}
           value={baseURL}
           onChange={(e) => setBaseURL(e.target.value)}
-          onBlur={() => update({ baseURL: baseURL.trim() })}
+          onBlur={() => updateProvider(tab, { baseURL: baseURL.trim() })}
         />
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="模型" hint="可直接输入任意模型名">
-          <Input list="model-suggestions" value={model} onChange={(e) => setModel(e.target.value)} onBlur={() => update({ model: model.trim() })} />
-          <datalist id="model-suggestions">
-            {MODEL_SUGGESTIONS.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label={`温度：${settings.temperature}`} hint="越低越稳定，翻译建议 0～0.3">
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.1}
-            value={settings.temperature}
-            onChange={(e) => update({ temperature: Number(e.target.value) })}
-            className="w-full accent-[var(--color-brand)]"
-          />
-        </Field>
-      </div>
+      <Field label="模型" hint={preset.models.length ? '可从下拉选择，也可直接输入任意模型名' : '填写服务商提供的模型名'}>
+        <Input list={`models-${tab}`} value={model} onChange={(e) => setModel(e.target.value)} onBlur={() => updateProvider(tab, { model: model.trim() })} />
+        <datalist id={`models-${tab}`}>
+          {preset.models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.note}
+            </option>
+          ))}
+        </datalist>
+      </Field>
+
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={runTest} disabled={testing}>
+        {active ? (
+          <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">当前正在使用</span>
+        ) : (
+          <Button onClick={activate} disabled={!!draftError} title={draftError ?? ''}>
+            使用 {preset.label}
+          </Button>
+        )}
+        <Button variant="secondary" onClick={runTest} disabled={testing || !!draftError} title={draftError ?? ''}>
           {testing ? '测试中…' : '测试连接'}
         </Button>
-        {test && <span className={test.ok ? 'text-sm text-emerald-600' : 'text-sm text-red-600'}>{test.message}</span>}
+        {test ? (
+          <span className={test.ok ? 'text-sm text-emerald-600' : 'text-sm text-red-600'}>{test.message}</span>
+        ) : (
+          draftError && <span className="text-sm text-[var(--fg-muted)]">{draftError.replace('请先在设置页', '请先')}</span>
+        )}
       </div>
+
+      <Field label={`温度：${settings.temperature}`} hint="越低越稳定，翻译建议 0～0.3。Claude Sonnet / Opus 新模型不支持调温度，会自动忽略。">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.1}
+          value={settings.temperature}
+          onChange={(e) => update({ temperature: Number(e.target.value) })}
+          className="w-full accent-[var(--color-brand)]"
+        />
+      </Field>
     </Card>
   );
 }

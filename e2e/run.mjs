@@ -15,6 +15,7 @@ try {
 
 const EXT = path.resolve('.output/chrome-mv3');
 const requests = [];
+const claudeRequests = [];
 
 const PAGE = `<!doctype html><html lang="en"><head><title>E2E Test Page</title>
 <style>body{font:16px/1.6 sans-serif;max-width:700px;margin:auto} .spacer{height:3000px}</style></head><body>
@@ -57,6 +58,28 @@ const server = http.createServer(async (req, res) => {
       }),
     );
   }
+  if (req.url === '/v1/messages' && req.method === 'POST') {
+    let body = '';
+    for await (const c of req) body += c;
+    const json = JSON.parse(body);
+    claudeRequests.push({ body: json, apiKey: req.headers['x-api-key'] });
+    const user = json.messages[0].content;
+    const segs = [...user.matchAll(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g)];
+    const text = segs.length ? segs.map((m) => `<seg id="${m[1]}">【Claude】${m[2]}</seg>`).join('\n') : '你好，世界！';
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(
+      JSON.stringify({
+        id: 'msg_x',
+        type: 'message',
+        role: 'assistant',
+        model: json.model,
+        content: [{ type: 'text', text }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    );
+  }
   res.writeHead(404).end();
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -84,9 +107,10 @@ try {
   await options.goto(`chrome-extension://${extId}/options.html`);
   await options.evaluate(async (baseURL) => {
     await chrome.storage.local.set({
-      settings: { apiKey: 'test', baseURL, model: 'mock-model', batchSize: 5 },
+      settings: { activeProvider: 'custom', providers: { custom: { apiKey: 'test', baseURL, model: 'mock-model' } }, batchSize: 5 },
     });
   }, `${base}/v1`);
+  await options.reload();
   await options.getByRole('button', { name: '测试连接' }).click();
   await options.getByText(/连接成功/).waitFor({ timeout: 10000 });
   check('设置页测试连接', true, await options.getByText(/连接成功/).textContent());
@@ -156,6 +180,27 @@ try {
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForFunction(() => document.querySelector('#p1 tx-translation')?.dataset.txState === 'done', null, { timeout: 15000 });
   check('总是翻译的网站自动翻译 + 命中缓存不再请求', requests.length === beforeReload, `新增请求 ${requests.length - beforeReload}`);
+
+  // 切换到 Claude：页面自动用新服务商重新翻译
+  await options.evaluate(async (baseURL) => {
+    const { settings } = await chrome.storage.local.get('settings');
+    await chrome.storage.local.set({
+      settings: {
+        ...settings,
+        activeProvider: 'anthropic',
+        providers: { ...settings.providers, anthropic: { apiKey: 'sk-ant-test', baseURL, model: 'claude-haiku-4-5' } },
+      },
+    });
+  }, base);
+  await page.waitForFunction(() => document.querySelector('#p1 tx-translation')?.textContent?.includes('【Claude】'), null, { timeout: 15000 });
+  const p1Claude = await page.locator('#p1 tx-translation').innerHTML();
+  check('切换到 Claude 后重新翻译，格式保留', p1Claude.includes('href="https://example.com/docs"') && p1Claude.includes('<b>'), p1Claude);
+  const cr = claudeRequests.at(-1);
+  check(
+    'Claude 请求：Haiku 模型、带 Key、系统提示词、温度',
+    cr && cr.body.model === 'claude-haiku-4-5' && cr.apiKey === 'sk-ant-test' && cr.body.system.includes('Simplified Chinese') && cr.body.temperature === 0.2,
+    JSON.stringify({ model: cr?.body.model, temperature: cr?.body.temperature, max_tokens: cr?.body.max_tokens }),
+  );
 
   await page.screenshot({ path: process.env.E2E_SCREENSHOT ?? 'e2e/screenshot.png' });
 

@@ -1,5 +1,6 @@
 import { defineExtensionMessaging } from '@webext-core/messaging';
-import type { DisplayMode, Settings } from './settings';
+import type { ProviderConfig, ProviderType } from './providers';
+import type { DisplayMode } from './settings';
 
 export interface TranslateRequest {
   /** 已经过占位符序列化的段落 */
@@ -24,7 +25,8 @@ export interface PageStatus {
 interface ProtocolMap {
   // content / options → background
   translate(req: TranslateRequest): TranslateResponse;
-  testConnection(settings?: Partial<Settings>): { ok: boolean; message: string };
+  /** 不传则测试当前使用的服务商；设置页传入正在编辑的配置 */
+  testConnection(provider?: { type: ProviderType; config: ProviderConfig }): { ok: boolean; message: string };
   cacheStats(): { count: number };
   clearCache(): { count: number };
   // popup / background → content
