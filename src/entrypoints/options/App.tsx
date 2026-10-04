@@ -260,6 +260,13 @@ function SitesSection({ settings, update }: SectionProps) {
         <span className="text-sm font-medium">显示悬浮按钮</span>
         <Switch checked={settings.showFloatingButton} onChange={(v) => update({ showFloatingButton: v })} />
       </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium">YouTube 双语字幕</div>
+          <div className="text-xs text-[var(--fg-muted)]">视频有字幕（含自动字幕）时自动打开并翻译；播放器右下角的「译」按钮可随时开关。</div>
+        </div>
+        <Switch checked={settings.youtubeEnabled} onChange={(v) => update({ youtubeEnabled: v })} />
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="总是翻译的网站" hint="每行一个域名，包含子域名">
           <Textarea rows={4} placeholder="news.ycombinator.com" value={always} onChange={(e) => setAlways(e.target.value)} onBlur={() => update({ alwaysTranslateSites: toList(always) })} />

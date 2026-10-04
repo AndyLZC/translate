@@ -6,6 +6,8 @@ export interface TranslateRequest {
   /** 已经过占位符序列化的段落 */
   texts: string[];
   context?: { title?: string; url?: string };
+  /** subtitle：视频字幕，按更大的批次翻译，并提示模型这是连续的字幕 */
+  kind?: 'page' | 'subtitle';
 }
 
 export interface TranslateResponse {

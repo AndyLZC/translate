@@ -1,0 +1,30 @@
+/* 开启双语字幕时隐藏 YouTube 原生字幕，由插件的叠加层代替 */
+.html5-video-player[data-tx-subs] .ytp-caption-window-container,
+.html5-video-player[data-tx-subs] .caption-window {
+  display: none !important;
+}
+
+.tx-yt-btn {
+  position: relative;
+  width: 48px;
+  height: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  vertical-align: top;
+}
+.tx-yt-btn[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  left: 25%;
+  right: 25%;
+  bottom: 22%;
+  height: 3px;
+  border-radius: 3px;
+  background: #f00;
+}
+.tx-yt-btn[aria-pressed='false'] svg {
+  opacity: 0.85;
+}

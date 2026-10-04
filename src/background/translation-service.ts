@@ -80,7 +80,7 @@ export class TranslationService {
 
     let lastError = '';
     if (todo.length) {
-      const job = this.run(todo, settings, system, req.context).then((r) => {
+      const job = this.run(todo, settings, system, req.context, req.kind ?? 'page').then((r) => {
         if (r.error) lastError = r.error;
         return r.done;
       });
@@ -107,6 +107,7 @@ export class TranslationService {
     s: Settings,
     system: string,
     context: TranslateRequest['context'],
+    kind: 'page' | 'subtitle',
   ): Promise<{ done: Map<string, string>; error?: string }> {
     const queue = this.getQueue(s);
     const done = new Map<string, string>();
@@ -120,6 +121,7 @@ export class TranslationService {
           prompt: buildUserPrompt(
             chunk.map((c) => c.text),
             context,
+            kind,
           ),
           settings: s,
         });
@@ -137,7 +139,9 @@ export class TranslationService {
     };
 
     // 第一轮：打包翻译
-    const chunks = chunkTexts(todo, s.batchSize, s.batchChars);
+    // 字幕每句很短，大批次能给模型更多上下文，也更省 token
+    const chunks =
+      kind === 'subtitle' ? chunkTexts(todo, SUBTITLE_BATCH_SIZE, SUBTITLE_BATCH_CHARS) : chunkTexts(todo, s.batchSize, s.batchChars);
     const ok = await Promise.all(chunks.map((c) => queue.add(() => runChunk(c))));
 
     // 第二轮：请求成功但段数对不上的批次，只把漏掉的段落逐段重发一次
@@ -154,6 +158,8 @@ export class TranslationService {
 }
 
 const MAX_SINGLE_RETRIES = 20;
+const SUBTITLE_BATCH_SIZE = 40;
+const SUBTITLE_BATCH_CHARS = 6000;
 
 export function chunkTexts<T extends { text: string }>(items: T[], maxCount: number, maxChars: number): T[][] {
   const chunks: T[][] = [];

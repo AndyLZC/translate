@@ -28,6 +28,8 @@ export interface Settings {
   alwaysTranslateSites: string[];
   neverTranslateSites: string[];
   showFloatingButton: boolean;
+  /** YouTube 双语字幕 */
+  youtubeEnabled: boolean;
   /** 用户自定义站点规则（JSON），会覆盖同名内置规则 */
   customSiteRules: string;
 }
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alwaysTranslateSites: [],
   neverTranslateSites: [],
   showFloatingButton: true,
+  youtubeEnabled: true,
   customSiteRules: '',
 };
 

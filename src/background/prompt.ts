@@ -53,8 +53,13 @@ export function parseGlossary(text: string): [string, string][] {
     .filter((x): x is [string, string] => !!x && !!x[0] && !!x[1]);
 }
 
-export function buildUserPrompt(texts: string[], context?: { title?: string }): string {
-  const head = context?.title ? `Page title (for context only, do not translate): ${context.title}\n\n` : '';
+export function buildUserPrompt(texts: string[], context?: { title?: string }, kind: 'page' | 'subtitle' = 'page'): string {
+  let head = '';
+  if (kind === 'subtitle') {
+    head += `These segments are consecutive subtitle lines from a video${context?.title ? ` titled "${context.title}"` : ''}. They may be automatically transcribed: fix obvious transcription errors silently, use the surrounding lines for context, and keep each translation concise enough to read as a subtitle.\n\n`;
+  } else if (context?.title) {
+    head += `Page title (for context only, do not translate): ${context.title}\n\n`;
+  }
   return head + texts.map((t, i) => `<seg id="${i + 1}">${t}</seg>`).join('\n');
 }
 

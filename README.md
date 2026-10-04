@@ -7,6 +7,7 @@
 - **省钱省时**：多段合并成一个请求按编号返回；只翻译可视区域（多预留一屏）；已经是目标语言的段落直接跳过；结果缓存在本地
 - **动态页面**：无限滚动、单页应用切换、评论展开等新内容自动翻译，原文变了会重新翻译
 - **站点规则**：X/Twitter、GitHub、Reddit、Hacker News、Wikipedia、Stack Overflow、YouTube 评论有内置规则，可在设置页用 JSON 覆盖或新增
+- **YouTube 双语字幕**：拦截播放器自己的字幕（人工字幕和自动字幕都支持），合并成完整句子后按批翻译，在播放器里按进度显示原文 + 译文；全屏可用，切换视频自动跟上
 - **多家模型可选**：OpenAI、DeepSeek、Claude（默认 Haiku 4.5）、任意 OpenAI 兼容接口（OpenRouter、本地 Ollama 等）。每家单独保存 Key 和模型，在弹窗或设置页随时切换
 
 ## 安装（开发版）
@@ -30,6 +31,7 @@ Firefox：打开 `about:debugging#/runtime/this-firefox` → "临时载入附加
 - 弹窗里可设置"总是翻译这个网站"
 - 某段失败时，段落后会出现「⚠ 重试」小标记，鼠标移上去能看到原因；悬浮按钮旁的进度条也会写明失败原因，点它重试全部失败段落
 - 导航菜单和按钮默认不翻译（译文插进去会撑乱布局）
+- YouTube：视频有字幕时自动显示双语字幕；播放器右下角的「译」按钮开关（设置页也可关闭）。已经是中文字幕的视频不叠加
 
 ## 开发
 
@@ -37,7 +39,7 @@ Firefox：打开 `about:debugging#/runtime/this-firefox` → "临时载入附加
 npm run dev        # 启动带热更新的 Chrome（WXT）
 npm test           # 单元测试（Vitest + happy-dom）
 npm run compile    # 类型检查
-npm run test:e2e   # 端到端测试：真实 Chromium 加载扩展 + 模拟 OpenAI 接口
+npm run test:e2e   # 端到端测试：真实 Chromium 加载扩展 + 模拟 OpenAI 接口 + 模拟 YouTube 播放器
 ```
 
 ### 目录结构
@@ -47,6 +49,8 @@ src/
 ├─ entrypoints/
 │  ├─ background.ts        # Service Worker：接收翻译请求、调用模型、快捷键、右键菜单
 │  ├─ content/             # 内容脚本入口 + 译文样式
+│  ├─ youtube-main.content.ts  # YouTube 页面环境（MAIN world）：拦截播放器的字幕请求
+│  ├─ youtube.content/     # YouTube 双语字幕入口 + 样式
 │  ├─ popup/               # 工具栏弹窗（React）
 │  └─ options/             # 设置页（React）
 ├─ background/
@@ -62,6 +66,11 @@ src/
 │  ├─ dom-watcher.ts       # MutationObserver：动态内容
 │  ├─ controller.ts        # 总控
 │  └─ floating-button.ts   # Shadow DOM 悬浮按钮
+├─ youtube/
+│  ├─ subtitles.ts         # 解析 json3/XML 字幕，逐词/逐行合并成句子
+│  ├─ controller.ts        # 拦截 → 断句 → 从当前位置分批翻译 → 按进度显示；切换视频；播放器按钮
+│  ├─ overlay.ts           # 播放器内的双语字幕层（Shadow DOM）
+│  └─ bridge.ts            # 页面脚本与内容脚本的消息协议
 └─ lib/                    # 设置、消息协议、站点规则、语言检测
 ```
 
@@ -96,4 +105,5 @@ src/
 
 - "只看译文"只对整段生效；段落里夹着子段落的零散文字仍是双语显示
 - 只翻译顶层页面，不翻译 iframe 内的内容
-- YouTube 字幕翻译还没做（下一阶段）
+- YouTube 字幕依赖播放器未公开的接口和字幕请求格式，YouTube 改版后可能需要调整；没有任何字幕的视频暂不支持（需要语音识别）
+- Shorts 和移动版 YouTube 未适配

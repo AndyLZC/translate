@@ -14,21 +14,26 @@ const configError = (s: Settings) => providerConfigError(s.activeProvider, activ
  * 重新注入一份：新脚本启动时 WXT 会让旧脚本失效，旧的悬浮按钮随之移除。
  */
 async function injectIntoOpenTabs() {
-  const manifest = browser.runtime.getManifest();
-  const cs = manifest.content_scripts?.[0];
-  if (!cs?.js) return;
-  const tabs = await browser.tabs.query({ url: ['http://*/*', 'https://*/*'] });
-  await Promise.all(
-    tabs.map(async (tab) => {
-      if (tab.id == null || tab.discarded) return;
-      try {
-        if (cs.css?.length) await browser.scripting.insertCSS({ target: { tabId: tab.id }, files: cs.css as never });
-        await browser.scripting.executeScript({ target: { tabId: tab.id }, files: cs.js as never });
-      } catch {
-        // 商店页面、浏览器内置页面等不允许注入
-      }
-    }),
-  );
+  for (const cs of browser.runtime.getManifest().content_scripts ?? []) {
+    if (!cs.js?.length) continue;
+    const tabs = await browser.tabs.query({ url: cs.matches?.includes('<all_urls>') ? ['http://*/*', 'https://*/*'] : cs.matches });
+    await Promise.all(
+      tabs.map(async (tab) => {
+        if (tab.id == null || tab.discarded) return;
+        const target = { tabId: tab.id, allFrames: !!cs.all_frames };
+        try {
+          if (cs.css?.length) await browser.scripting.insertCSS({ target, files: cs.css as never });
+          await browser.scripting.executeScript({
+            target,
+            files: cs.js as never,
+            world: (cs as { world?: 'MAIN' | 'ISOLATED' }).world ?? 'ISOLATED',
+          } as never);
+        } catch {
+          // 商店页面、浏览器内置页面等不允许注入
+        }
+      }),
+    );
+  }
 }
 
 export default defineBackground(() => {
