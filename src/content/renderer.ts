@@ -49,10 +49,11 @@ export function renderTranslation(unit: Unit, translated: string) {
 export function renderError(unit: Unit, message: string, onRetry: () => void) {
   const el = ensureTranslationEl(unit);
   el.dataset.txState = 'error';
-  el.title = message;
   const btn = document.createElement('tx-loading');
   btn.dataset.txRetry = '';
-  btn.textContent = '翻译失败，点击重试';
+  // 只放一个小标记，原因写在提示里，避免整页铺满错误文字
+  btn.textContent = '⚠ 重试';
+  btn.title = `翻译失败：${message}（点击重试）`;
   btn.addEventListener(
     'click',
     (e) => {

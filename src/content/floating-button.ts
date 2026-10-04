@@ -25,7 +25,7 @@ const CSS = `
 .menu button { border: none; background: transparent; padding: 6px 9px; border-radius: 7px; cursor: pointer; font: inherit; color: inherit; }
 .menu button:hover { background: #eef2ff; }
 .menu button.active { background: #4f46e5; color: #fff; }
-.progress { font-size: 11px; color: #555; background: #fff; border-radius: 8px; padding: 2px 6px;
+.progress { max-width: 260px; font-size: 11px; line-height: 1.4; color: #555; background: #fff; border-radius: 8px; padding: 2px 6px;
   box-shadow: 0 2px 8px rgba(0,0,0,.12); display: none; }
 .progress.show { display: block; }
 .close { position: absolute; top: -6px; left: -6px; width: 16px; height: 16px; border-radius: 50%; border: none;
@@ -116,7 +116,7 @@ export class FloatingButton {
     const showProgress = s.enabled && (busy || s.failed > 0);
     this.progress.classList.toggle('show', showProgress);
     this.progress.textContent = s.failed
-      ? `${s.done}/${s.total} · ${s.failed} 段失败，点此重试`
+      ? `${s.done}/${s.total} · ${s.failed} 段失败${s.error ? `：${s.error}` : ''}。点此重试`
       : `${s.done}/${s.total}`;
     this.progress.style.cursor = s.failed ? 'pointer' : 'default';
   }

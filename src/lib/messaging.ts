@@ -20,6 +20,8 @@ export interface PageStatus {
   total: number;
   done: number;
   failed: number;
+  /** 最近一次失败的原因，给用户看 */
+  error?: string;
 }
 
 interface ProtocolMap {

@@ -111,6 +111,12 @@ export const GLOBAL_EXCLUDE = [
   'input',
   'select',
   'option',
+  // 导航菜单、按钮：译文插进去会撑乱布局，收益也小
+  'nav',
+  '[role="navigation"]',
+  '[role="menubar"]',
+  '[role="menu"]',
+  'button',
   '[contenteditable=""]',
   '[contenteditable="true"]',
   '[translate="no"]',

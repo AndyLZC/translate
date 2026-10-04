@@ -1,3 +1,4 @@
+import { browser } from 'wxt/browser';
 import { sendMessage, type PageStatus } from '@/lib/messaging';
 import type { DisplayMode, Settings } from '@/lib/settings';
 import { GLOBAL_EXCLUDE, resolveSiteRule } from '@/lib/site-rules';
@@ -20,6 +21,7 @@ export class PageTranslator {
   /** 每次开启/关闭递增，丢弃过期请求的结果 */
   private generation = 0;
   private listeners = new Set<(s: PageStatus) => void>();
+  private lastError = '';
 
   constructor(private settings: Settings) {
     this.applyAppearance();
@@ -45,7 +47,14 @@ export class PageTranslator {
       if (u.state === 'done') done++;
       else if (u.state === 'error') failed++;
     }
-    return { enabled: this.enabled, mode: this.settings.displayMode, total, done, failed };
+    return {
+      enabled: this.enabled,
+      mode: this.settings.displayMode,
+      total,
+      done,
+      failed,
+      ...(failed && this.lastError ? { error: this.lastError } : {}),
+    };
   }
 
   private emit() {
@@ -111,6 +120,7 @@ export class PageTranslator {
     this.flushTimer = undefined;
     this.queue = [];
     this.units.clear();
+    this.lastError = '';
     removeAllTranslations();
     this.emit();
   }
@@ -218,9 +228,10 @@ export class PageTranslator {
       translations = res.translations;
       error = res.error ?? '';
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = messagingError(e);
     }
     if (gen !== this.generation) return;
+    if (error) this.lastError = error;
 
     batch.forEach((u, i) => {
       if (!this.units.has(u.id)) return; // 期间原文变了，单元已被丢弃
@@ -245,4 +256,19 @@ export class PageTranslator {
   retryFailed() {
     this.enqueue([...this.units.values()].filter((u) => u.state === 'error').map((u) => ((u.state = 'pending'), u)));
   }
+}
+
+/** 页面打开后插件被更新/重新加载：这个标签页里的旧脚本已和插件断开，只能刷新页面 */
+function messagingError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  let alive = true;
+  try {
+    alive = !!browser.runtime?.id;
+  } catch {
+    alive = false;
+  }
+  if (!alive || /context invalidated|Receiving end does not exist|Could not establish connection/i.test(msg)) {
+    return '插件刚更新或重新加载过，请刷新这个页面后再翻译';
+  }
+  return msg;
 }

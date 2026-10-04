@@ -101,7 +101,11 @@ export default function App() {
           {progress && <span className="text-xs opacity-70">{progress}</span>}
         </Button>
       )}
-      {!!status?.failed && <p className="text-xs text-red-600">{status.failed} 段翻译失败，可点页面上的"点击重试"或悬浮按钮的进度条重试。</p>}
+      {!!status?.failed && (
+        <p className="text-xs text-red-600">
+          {status.failed} 段翻译失败{status.error ? `：${status.error}` : ''}。可点页面上的「⚠ 重试」或悬浮按钮旁的进度条重试。
+        </p>
+      )}
 
       <div className="space-y-1.5">
         <div className="text-xs text-[var(--fg-muted)]">显示方式</div>

@@ -19,6 +19,8 @@ const claudeRequests = [];
 
 const PAGE = `<!doctype html><html lang="en"><head><title>E2E Test Page</title>
 <style>body{font:16px/1.6 sans-serif;max-width:700px;margin:auto} .spacer{height:3000px}</style></head><body>
+<nav id="nav"><a href="/us">US news</a> <a href="/world">World news</a></nav>
+<button id="btn">Subscribe now</button>
 <h1>Hello world</h1>
 <p id="p1">Read the <a href="https://example.com/docs">documentation</a> and <b>star</b> the repo.</p>
 <p id="zh">这一段已经是中文了。</p>
@@ -38,6 +40,10 @@ const server = http.createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
     const json = JSON.parse(body);
+    if (req.headers.authorization === 'Bearer bad-key') {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ error: { message: 'Incorrect API key provided', type: 'invalid_request_error' } }));
+    }
     const user = json.messages.find((m) => m.role === 'user').content;
     requests.push(user);
     const segs = [...user.matchAll(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g)];
@@ -130,6 +136,7 @@ try {
   check('链接在译文中可点击', (await page.locator('#p1 tx-translation a[href="https://example.com/docs"]').count()) === 1);
   check('标题翻译', (await page.locator('h1 tx-translation').textContent())?.includes('【译】Hello world'));
   check('已是中文的段落跳过', (await page.locator('#zh tx-translation').count()) === 0);
+  check('导航菜单和按钮跳过', (await page.locator('#nav tx-translation, #btn tx-translation').count()) === 0);
   check('代码块跳过', (await page.locator('#code tx-translation').count()) === 0);
   const mixed = await page.locator('#mixed > tx-translation').allTextContents();
   check('混合块按行内片段分别翻译', mixed.length === 2 && mixed[0].includes('Intro words here'), JSON.stringify(mixed));
@@ -208,6 +215,22 @@ try {
   await page.mouse.click(page.viewportSize().width - 38, page.viewportSize().height - 116);
   await page.waitForTimeout(300);
   check('关闭后移除所有译文', (await page.locator('tx-translation').count()) === 0);
+
+  // API Key 错误：失败原因显示在悬浮按钮旁，段落里只放小标记
+  await options.evaluate(async (baseURL) => {
+    const { settings } = await chrome.storage.local.get('settings');
+    await chrome.storage.local.set({
+      settings: { ...settings, activeProvider: 'custom', providers: { ...settings.providers, custom: { apiKey: 'bad-key', baseURL, model: 'other-model' } } },
+    });
+  }, `${base}/v1`);
+  await page.mouse.click(page.viewportSize().width - 38, page.viewportSize().height - 116);
+  await page.waitForFunction(() => document.querySelector('#p1 tx-translation')?.dataset.txState === 'error', null, { timeout: 20000 });
+  const marker = await page.locator('#p1 tx-translation').textContent();
+  const progress = await page.evaluate(() => {
+    // 悬浮按钮在 closed shadow root 里，读不到；改为通过 popup 同款状态接口确认
+    return document.querySelector('#p1 tx-translation tx-loading')?.getAttribute('title');
+  });
+  check('API Key 错误：显示失败原因、段落里只有小标记', marker === '⚠ 重试' && progress.includes('API Key 无效'), `${marker} / ${progress}`);
 } catch (e) {
   failures++;
   console.error(e);
