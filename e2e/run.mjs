@@ -209,7 +209,7 @@ try {
     JSON.stringify({ model: cr?.body.model, temperature: cr?.body.temperature, max_tokens: cr?.body.max_tokens }),
   );
 
-  await page.screenshot({ path: process.env.E2E_SCREENSHOT ?? 'e2e/screenshot.png' });
+  await page.screenshot({ animations: 'disabled', path: process.env.E2E_SCREENSHOT ?? 'e2e/screenshot.png' });
 
   // 关闭翻译：清理干净
   await page.mouse.click(page.viewportSize().width - 38, page.viewportSize().height - 116);
@@ -228,9 +228,9 @@ try {
   const marker = await page.locator('#p1 tx-translation').textContent();
   const progress = await page.evaluate(() => {
     // 悬浮按钮在 closed shadow root 里，读不到；改为通过 popup 同款状态接口确认
-    return document.querySelector('#p1 tx-translation tx-loading')?.getAttribute('title');
+    return document.querySelector('#p1 tx-translation tx-retry')?.getAttribute('title');
   });
-  check('API Key 错误：显示失败原因、段落里只有小标记', marker === '⚠ 重试' && progress.includes('API Key 无效'), `${marker} / ${progress}`);
+  check('API Key 错误：显示失败原因、段落里只有小标记', marker === '重试' && progress.includes('API Key 无效'), `${marker} / ${progress}`);
 } catch (e) {
   failures++;
   console.error(e);

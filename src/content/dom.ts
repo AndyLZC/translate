@@ -1,6 +1,6 @@
 /** 插件插入页面的元素都用这些标签名，扫描和监听时据此识别并忽略 */
 export const TRANSLATION_TAG = 'tx-translation';
-export const OWN_TAGS = new Set(['TX-TRANSLATION', 'TX-LOADING', 'TX-FLOAT', 'TX-UI', 'TX-LEARN', 'TX-SUBTITLE']);
+export const OWN_TAGS = new Set(['TX-TRANSLATION', 'TX-LOADING', 'TX-FLOAT', 'TX-UI', 'TX-LEARN', 'TX-RETRY', 'TX-SUBTITLE']);
 
 export function isOwnNode(node: Node | null): boolean {
   for (let n = node; n; n = n.parentNode) {

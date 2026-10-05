@@ -35,7 +35,11 @@ export function ensureTranslationEl(unit: Unit): HTMLElement {
 export function renderLoading(unit: Unit) {
   const el = ensureTranslationEl(unit);
   el.dataset.txState = 'loading';
-  el.replaceChildren(document.createElement('tx-loading'));
+  const spinner = document.createElement('tx-loading');
+  spinner.setAttribute('role', 'status');
+  spinner.setAttribute('aria-label', '翻译中');
+  spinner.title = '翻译中…';
+  el.replaceChildren(spinner);
 }
 
 export interface RenderOptions {
@@ -74,20 +78,22 @@ export function renderTranslation(unit: Unit, translated: string, opts: RenderOp
 export function renderError(unit: Unit, message: string, onRetry: () => void) {
   const el = ensureTranslationEl(unit);
   el.dataset.txState = 'error';
-  const btn = document.createElement('tx-loading');
-  btn.dataset.txRetry = '';
-  // 只放一个小标记，原因写在提示里，避免整页铺满错误文字
-  btn.textContent = '⚠ 重试';
+  const btn = document.createElement('tx-retry');
+  btn.setAttribute('role', 'button');
+  btn.tabIndex = 0;
+  // 只放一个小标签，原因写在提示里，避免整页铺满错误文字
+  btn.textContent = '重试';
   btn.title = `翻译失败：${message}（点击重试）`;
-  btn.addEventListener(
-    'click',
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onRetry();
-    },
-    { once: true },
-  );
+  let fired = false;
+  const retry = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (fired) return;
+    fired = true;
+    onRetry();
+  };
+  btn.addEventListener('click', retry);
+  btn.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && retry(e));
   el.replaceChildren(btn);
 }
 
