@@ -16,21 +16,38 @@ const EXT = path.resolve('.output/chrome-mv3');
 const calls = [];
 
 const ANALYSIS = `【译文】这些不受喜爱的生物是土壤的居民。
-【一句话看懂】这些小虫和蚯蚓一起住在土壤里，而土壤恐怕是最不起眼的栖息地。
-【句子拆解】
+【一句话看懂】
+**土壤是最不起眼、却最重要的栖息地。**
+- 第一句先说：这些小虫和蚯蚓都住在土壤里，而土壤是最不起眼的栖息地。
+- 第二句转折：可土壤恰恰是最重要的生态系统。
+两句是「先抑后扬」，作者要强调的是第二句。
+【逐句拆解】
+### 第一句（重点）
 > These unloved critters, | along with countless earthworms, | are denizens of | what is probably the least charismatic habitat of all: | soil.
 **主干**：These unloved critters are denizens of …
+意思是：这些不受待见的小生物是……的居民。
+逐块看：
 - along with countless earthworms：插入的伴随状语，补充还有谁也住在这里
+- what is probably the least charismatic habitat of all：
+  - what 引导名词性从句，作 of 的宾语
+  - 冒号后的 soil 揭晓答案
+### 第二句：And yet the soil and its inhabitants are the most important ecosystems of the lot.
+- And yet：转折「然而」，和第一句形成对比
 【难点提醒】
-- what 引导名词性从句，作 of 的宾语，不是疑问句
-【重点词汇】
-- denizen /ˈden.ɪ.zən/ n. 居民；栖息者
+- **what 不是疑问句。** 这里 what = the thing that，引导名词性从句。
+- **And yet 是转折。** 前一句贬，后一句褒。
+【重点词汇和搭配】
+| 词 / 搭配 | 意思 |
+| --- | --- |
+| denizen /ˈden.ɪ.zən/ n. | 居民；栖息者 |
+| charismatic /ˌkær.ɪzˈmæt.ɪk/ adj. | 有魅力的；这里指「引人注目的」 |
+| along with | 和……一起 |
 `;
 
 function reply(system, messages) {
   const last = messages.at(-1).content;
   if (system.includes('concise bilingual dictionary')) return `${last} /ˈsɔɪl/\nn. 土壤；泥土\n例：Plants grow in soil. 植物生长在土壤里。`;
-  if (system.includes('【句子拆解】')) return ANALYSIS;
+  if (system.includes('【逐句拆解】')) return ANALYSIS;
   if (system.includes('follow-up')) return `关于「${last}」：what 在这里引导宾语从句。`;
   if (system.includes('chat box')) return 'Hello, my friend!';
   const segs = [...last.matchAll(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g)];
@@ -148,17 +165,18 @@ try {
   // 流式：先看到正在生成（带光标）的部分内容，再等全部完成
   await page.locator('tx-ui .panel .md .caret').waitFor({ timeout: 10000 });
   const partial = (await page.locator('tx-ui .panel .md').textContent()).length;
-  await page.locator('tx-ui .panel .md h4:has-text("重点词汇") ~ ul li').first().waitFor({ timeout: 10000 });
+  await page.locator('tx-ui .panel .md h4:has-text("重点词汇") ~ table td').first().waitFor({ timeout: 10000 });
   await page.waitForFunction(() => !document.querySelector('tx-ui').shadowRoot.querySelector('.panel .md .caret'), null, { timeout: 10000 });
   const full = (await page.locator('tx-ui .panel .md').textContent()).length;
-  const analyzeCall = calls.find((c) => c.system.includes('【句子拆解】'));
+  const analyzeCall = calls.find((c) => c.system.includes('【逐句拆解】'));
   check('解析流式输出：先显示部分内容，完成后光标消失', partial > 0 && partial < full && analyzeCall.stream, `${partial} → ${full}`);
   check('页面已有译文时不让模型重复翻译', !analyzeCall.system.includes('【译文】') && analyzeCall.messages[0].content.includes('Reference translation'));
   const orig = await page.locator('tx-ui .panel .sentence .orig').textContent();
   const sections = await page.locator('tx-ui .panel .md h4').allTextContents();
-  check('解析面板：原文、一句话看懂、句子拆解、难点、词汇', orig.startsWith('These unloved critters') && sections.join(',') === '一句话看懂,句子拆解,难点提醒,重点词汇', sections.join(','));
+  check('解析面板：一句话看懂、逐句拆解、难点提醒、词汇表', orig.startsWith('These unloved critters') && sections.join(',') === '一句话看懂,逐句拆解,难点提醒,重点词汇和搭配', sections.join(','));
   check('解析面板：原句按意群切开显示', (await page.locator('tx-ui .panel .md .chunks .chunk').count()) === 5);
-  check('解析面板：加粗标签渲染、不显示原始 ** 符号', (await page.locator('tx-ui .panel .md strong').first().textContent()) === '主干' && !(await page.locator('tx-ui .panel .md').textContent()).includes('**'));
+  check('解析面板：逐句小标题、子列表、词汇表格', (await page.locator('tx-ui .panel .md h5').count()) === 2 && (await page.locator('tx-ui .panel .md li > ul > li').count()) === 2 && (await page.locator('tx-ui .panel .md tbody tr').count()) === 3);
+  check('解析面板：加粗标签渲染、不显示原始 ** 符号', (await page.locator('tx-ui .panel .md strong').first().textContent()) === '土壤是最不起眼、却最重要的栖息地。' && !(await page.locator('tx-ui .panel .md').textContent()).includes('**'));
   const layers = await page.evaluate(() => {
     const md = document.querySelector('tx-ui').shadowRoot.querySelector('.panel .md');
     return { term: md.querySelector('.term')?.textContent, phon: md.querySelector('.phon')?.textContent, pos: md.querySelector('.pos')?.textContent, en: md.querySelector('li .en')?.textContent };
@@ -172,12 +190,17 @@ try {
     return a && a.textContent.includes('引导宾语从句') && !a.querySelector('.caret');
   }, null, { timeout: 10000 });
   const last = calls.at(-1);
-  check('追问 AI：带上原文和解析，多轮对话', (await page.locator('tx-ui .bubble.a').textContent()).includes('引导宾语从句') && last.messages.length === 3 && last.messages[1].content.includes('【句子拆解】'));
+  check('追问 AI：带上原文和解析，多轮对话', (await page.locator('tx-ui .bubble.a').textContent()).includes('引导宾语从句') && last.messages.length === 3 && last.messages[1].content.includes('【逐句拆解】'));
   if (shots) await page.screenshot({ animations: 'disabled', path: `${shots}/feat-analysis.png` });
+  if (shots) {
+    await page.evaluate(() => (document.querySelector('tx-ui').shadowRoot.querySelector('.panel-body').scrollTop = 99999));
+    await page.screenshot({ animations: 'disabled', path: `${shots}/feat-analysis-2.png` });
+    await page.evaluate(() => (document.querySelector('tx-ui').shadowRoot.querySelector('.panel-body').scrollTop = 0));
+  }
   await page.locator('tx-ui .panel button[title="收藏到生词本"]').click();
   await page.waitForTimeout(300);
   const notes2 = await options.evaluate(async () => (await chrome.storage.local.get('notebook')).notebook ?? []);
-  check('句子收藏到生词本（含解析）', notes2[0]?.type === 'sentence' && notes2[0].analysis.includes('【句子拆解】'));
+  check('句子收藏到生词本（含解析）', notes2[0]?.type === 'sentence' && notes2[0].analysis.includes('【逐句拆解】'));
   await page.keyboard.press('Escape');
   check('Esc 关闭解析面板', (await page.locator('tx-ui .panel').count()) === 0);
 

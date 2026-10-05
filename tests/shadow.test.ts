@@ -37,10 +37,41 @@ describe('Shadow DOM（评论区组件）', () => {
 describe('解析渲染', () => {
   it('「> a | b」渲染成按意群切开的原句', () => {
     const box = document.createElement('div');
-    box.append(renderMarkdown('【句子拆解】\n> Since May 2025, | consumer sentiment has risen | for people\n**主干**：sentiment has risen'));
+    box.append(renderMarkdown('【逐句拆解】\n> Since May 2025, | consumer sentiment has risen | for people\n**主干**：sentiment has risen'));
     const chunks = [...box.querySelectorAll('.chunks .chunk')].map((e) => e.textContent);
     expect(chunks).toEqual(['Since May 2025,', 'consumer sentiment has risen', 'for people']);
     expect(box.querySelectorAll('.chunks .sep')).toHaveLength(2);
     expect(box.querySelector('strong')?.textContent).toBe('主干');
+  });
+});
+
+describe('解析渲染：完整格式', () => {
+  it('小标题、缩进子列表、表格', () => {
+    const box = document.createElement('div');
+    box.append(
+      renderMarkdown(
+        [
+          '【逐句拆解】',
+          '### 第二句（重点）',
+          '逐块看：',
+          "- those who don't own any：",
+          '  - those = those people',
+          '  - any 后面省略了 stocks',
+          '- while：表对比',
+          '【重点词汇和搭配】',
+          '| 词 / 搭配 | 意思 |',
+          '| --- | --- |',
+          '| stretch /stretʃ/ n. | 一段时间 |',
+          '| rosy outlook | 乐观的预期 |',
+        ].join('\n'),
+      ),
+    );
+    expect(box.querySelector('h5')?.textContent).toBe('第二句（重点）');
+    const top = box.querySelector('ul')!;
+    expect(top.children).toHaveLength(2);
+    expect(top.children[0].querySelectorAll('ul > li')).toHaveLength(2);
+    expect([...box.querySelectorAll('th')].map((e) => e.textContent)).toEqual(['词 / 搭配', '意思']);
+    expect(box.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(box.querySelector('tbody .phon')?.textContent).toBe('/stretʃ/');
   });
 });

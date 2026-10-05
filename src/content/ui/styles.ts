@@ -76,6 +76,15 @@ button { font: inherit; color: inherit; }
 .md h4::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
 .md > h4:first-child { margin-top: 2px; }
 .md p { margin: 3px 0; }
+.md h5 { margin: 16px 0 4px; font-size: 14px; font-weight: 700; color: var(--fg); line-height: 1.6; }
+.md h5 strong { color: inherit; }
+.md li > ul { margin: 2px 0 4px; }
+.md li > ul > li::marker { content: '◦  '; }
+.md table { width: 100%; margin: 6px 0 4px; border-collapse: collapse; font-size: .95em; }
+.md th, .md td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.md th { color: var(--muted-fg); font-weight: 600; font-size: .9em; }
+.md td:first-child { min-width: 6em; }
+.md td:first-child .en, .md td:first-child .term { font-weight: 600; }
 .md ul { margin: 2px 0 2px 2px; padding-left: 18px; }
 .md li { margin: 5px 0; padding-left: 2px; }
 .md li::marker { color: var(--primary); font-size: .9em; }

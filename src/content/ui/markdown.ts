@@ -1,5 +1,5 @@
 /**
- * 极简 Markdown 渲染：只支持 【小节】、"- " 列表、**加粗**。
+ * 极简 Markdown 渲染：【小节】、### 小标题、"- " 列表（可缩进一层）、> 意群切分、| 表格 |、**加粗**。
  * 全部用 textContent 生成节点，模型输出里的 HTML 不会被执行。
  */
 export interface Section {
@@ -102,25 +102,55 @@ function chunks(text: string): HTMLElement {
   return box;
 }
 
+/** 「| a | b |」表格：第一行是表头，「| --- |」分隔行跳过；单元格内容照常分层 */
+function table(rows: string[]): HTMLTableElement {
+  const t = document.createElement('table');
+  const cells = (row: string) => row.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  const body = rows.filter((r) => !/^\s*\|?\s*:?-{2,}/.test(r));
+  body.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    for (const c of cells(row)) {
+      const cell = document.createElement(i === 0 ? 'th' : 'td');
+      cell.append(i === 0 ? c.replace(/\*\*/g, '') : lineContent(c));
+      tr.append(cell);
+    }
+    (i === 0 ? (t.createTHead()) : (t.tBodies[0] ?? t.createTBody())).append(tr);
+  });
+  return t;
+}
+
 export function renderMarkdown(text: string): DocumentFragment {
   const frag = document.createDocumentFragment();
-  let list: HTMLUListElement | null = null;
+  /** 当前所在的列表层级：[0] 顶层，[1] 缩进的子列表 */
+  let lists: HTMLUListElement[] = [];
+  let rows: string[] = [];
+  const flushTable = () => {
+    if (rows.length) frag.append(table(rows));
+    rows = [];
+  };
   for (const raw of text.split('\n')) {
     const line = raw.trim();
+    if (line.startsWith('|')) {
+      lists = [];
+      rows.push(line);
+      continue;
+    }
+    flushTable();
     if (!line) {
-      list = null;
+      lists = [];
       continue;
     }
     const quote = line.match(/^(?:[-*•]\s+)?>\s*(.+)$/);
     if (quote) {
-      list = null;
+      lists = [];
       frag.append(chunks(quote[1]));
       continue;
     }
     const sec = line.match(/^【([^】]{1,12})】\s*(.*)$/);
+    const sub = line.match(/^#{2,6}\s+(.+)$/);
     const item = line.match(/^(?:[-*•]|\d+[.、])\s+(.*)$/);
     if (sec) {
-      list = null;
+      lists = [];
       const h4 = document.createElement('h4');
       h4.textContent = sec[1];
       frag.append(h4);
@@ -129,20 +159,37 @@ export function renderMarkdown(text: string): DocumentFragment {
         p.append(lineContent(sec[2]));
         frag.append(p);
       }
+    } else if (sub) {
+      // 「### 第二句（重点）」这类小标题
+      lists = [];
+      const h5 = document.createElement('h5');
+      h5.append(inline(sub[1]));
+      frag.append(h5);
     } else if (item) {
-      if (!list) {
-        list = document.createElement('ul');
-        frag.append(list);
-      }
+      const nested = /^\s{2,}|^\t/.test(raw) && lists.length > 0;
       const li = document.createElement('li');
       li.append(lineContent(item[1]));
-      list.append(li);
+      if (nested) {
+        if (!lists[1]) {
+          lists[1] = document.createElement('ul');
+          (lists[0].lastElementChild ?? lists[0]).append(lists[1]);
+        }
+        lists[1].append(li);
+      } else {
+        if (!lists[0]) {
+          lists[0] = document.createElement('ul');
+          frag.append(lists[0]);
+        }
+        lists.length = 1;
+        lists[0].append(li);
+      }
     } else {
-      list = null;
+      lists = [];
       const p = document.createElement('p');
       p.append(lineContent(line.replace(/^#+\s*/, '')));
       frag.append(p);
     }
   }
+  flushTable();
   return frag;
 }

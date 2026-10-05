@@ -39,14 +39,14 @@ describe('解析示范例子', () => {
   it('中文目标语言附上示范；页面已有译文时示范里也不出现【译文】', () => {
     const p = buildAnalysisPrompt('zh-CN', true);
     expect(p).toContain('=== Example');
-    expect(p).toContain("don't own any 后面省略了 stocks");
+    expect(p).toContain('any 后面省略了 stocks');
     expect(p).toContain('Reference translation');
     expect(p).not.toContain('【译文】富裕的美国人');
     expect(buildAnalysisPrompt('zh-CN', false)).toContain('【译文】富裕的美国人');
   });
 
   it('详细模式的示范逐句拆解并带仿写，标准模式不带', () => {
-    expect(buildAnalysisPrompt('zh-CN', true, 'detailed')).toContain('> Wealthier Americans | have a rosier outlook.');
+    expect(buildAnalysisPrompt('zh-CN', true, 'detailed')).toContain('时态成套出现');
     expect(buildAnalysisPrompt('zh-CN', true, 'detailed')).toContain('【仿写】');
     expect(buildAnalysisPrompt('zh-CN', true, 'standard')).not.toContain('【仿写】');
   });
