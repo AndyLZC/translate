@@ -170,7 +170,72 @@ export function buildAnalysisPrompt(targetLang: string, hasTranslation = false, 
     '【短语搭配】at most 3 "- phrase：meaning" items. Omit the section if there are none.',
     ...(detailed ? ['【仿写】one short new example sentence that reuses the key structure, followed by its translation on the next line.'] : []),
     'Quote original words exactly. Use **bold** only for "主干". No other markdown, no greetings, no closing remarks, and do not repeat the translation.',
+    // 示范例子是中文写的，只在目标语言是中文时附上
+    ...(targetLang.startsWith('zh') ? ['', analysisExample(hasTranslation, detailed)] : []),
   ].join('\n');
+}
+
+/**
+ * 示范例子（few-shot）：一份讲得好的完整解析，让模型照着它的深度和语气写——
+ * 先讲几句之间的逻辑，再按意群拆句，点出 any 省略、for / while 这些真正卡人的地方。
+ * 每次的系统提示词都一样，DeepSeek 等支持前缀缓存的服务商，这部分 token 按缓存价计费。
+ */
+const EXAMPLE_TEXT =
+  "Wealthier Americans have a rosier outlook. Since May 2025, consumer sentiment has risen for people who own the most stocks, while it has fallen for those who don't own any, according to Joanne Hsu, director of the Michigan survey. During that stretch, the broad S&P 500 stock index has handed investors a roughly 32% return.";
+const EXAMPLE_TRANSLATION =
+  '富裕的美国人对前景更乐观。密歇根大学消费者调查负责人 Joanne Hsu 表示，自 2025 年 5 月以来，持股最多的人群信心上升，而一股都没有的人群信心下降。同一时期，标普 500 指数为投资者带来了约 32% 的回报。';
+
+function analysisExample(hasTranslation: boolean, detailed: boolean): string {
+  const lines = [
+    '=== Example (for style and depth only; never reuse its content) ===',
+    'Passage:',
+    hasTranslation ? buildAnalysisInput(EXAMPLE_TEXT, EXAMPLE_TRANSLATION) : EXAMPLE_TEXT,
+    '',
+    'Reply:',
+    ...(hasTranslation ? [] : [`【译文】${EXAMPLE_TRANSLATION}`]),
+    '【一句话看懂】有钱人更乐观，是因为股市涨了。三句话是"结论 → 证据 → 原因"：先说富人更乐观，再用持股多和不持股两群人的信心一升一降作证据，最后用标普 500 上涨约 32% 解释原因——股市上涨只让持股的人受益。',
+    '【句子拆解】',
+    ...(detailed
+      ? [
+          '> Wealthier Americans | have a rosier outlook.',
+          '**主干**：Americans have an outlook',
+          '- Wealthier / rosier：两个比较级，比较的对象是不那么富的人；rosy 原意"玫瑰色的"，引申为"乐观的"',
+        ]
+      : []),
+    "> Since May 2025, | consumer sentiment has risen | for people who own the most stocks, | while it has fallen | for those who don't own any, | according to Joanne Hsu, director of the Michigan survey.",
+    '**主干**：sentiment has risen for A, while it has fallen for B',
+    '- Since May 2025：时间状语，since 要配现在完成时（has risen / has fallen），表示从那时到现在的变化',
+    '- for people who own the most stocks：for 是"对……这群人而言"，不是"为了"；who own the most stocks 是定语从句，指持股最多的人',
+    '- while it has fallen：while 在这里表对比，意思是"而"；it 指 consumer sentiment',
+    "- those who don't own any：those 代替前面的 people，any 后面省略了 stocks，即「一股都没有的人」",
+    '- director of the Michigan survey：Joanne Hsu 的同位语，交代她的身份',
+    '> During that stretch, | the broad S&P 500 stock index | has handed investors | a roughly 32% return.',
+    '**主干**：the index has handed investors a return',
+    '- During that stretch：that 回指上一句的"自 2025 年 5 月以来"，把股市上涨和信心分化连在一起',
+    '- has handed investors a … return：hand sb sth 双宾语，"把回报递到投资者手里"，比 give 更形象',
+    '【难点提醒】',
+    '- while 前后一升一降，是对比"而"，不是"当……时"',
+    "- don't own any 后面省略了 stocks，读的时候要自动补上",
+    ...(detailed ? ['- Since 和 During that stretch 都配现在完成时，三处 has 表示到现在为止的累计变化'] : []),
+    '【重点词汇】',
+    '- rosy /ˈroʊzi/ adj. 乐观的；rosier 是比较级，rosy outlook 指乐观的预期',
+    '- sentiment /ˈsentɪmənt/ n. 情绪、信心；consumer sentiment 是经济术语"消费者信心"',
+    '- stretch /stretʃ/ n. 一段连续的时间，不是"伸展"',
+    '- broad /brɔːd/ adj. 覆盖面广的；broad index 指覆盖整个大盘的宽基指数',
+    '【短语搭配】',
+    '- rosy outlook：乐观的前景',
+    '- hand sb a return：给某人带来回报',
+    '- according to sb：据某人所说',
+    ...(detailed
+      ? [
+          '【仿写】',
+          'Since the pandemic, remote work has grown for tech workers, while it has shrunk for those in retail.',
+          '疫情以来，科技行业的远程办公增多了，而零售业的却减少了。',
+        ]
+      : []),
+    '=== End of example ===',
+  ];
+  return lines.join('\n');
 }
 
 export function buildAnalysisInput(text: string, translation?: string) {

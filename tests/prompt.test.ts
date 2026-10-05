@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSystemPrompt, buildUserPrompt, parseGlossary, parseSegments } from '@/background/prompt';
+import { buildAnalysisPrompt, buildSystemPrompt, buildUserPrompt, parseGlossary, parseSegments } from '@/background/prompt';
 
 describe('prompt', () => {
   it('按编号打包段落', () => {
@@ -32,5 +32,26 @@ describe('prompt', () => {
   it('缺失的编号不出现在结果里；单段时接受不带包裹的输出', () => {
     expect(parseSegments('<seg id="1">甲</seg>', 2).has(2)).toBe(false);
     expect(parseSegments('甲', 1).get(1)).toBe('甲');
+  });
+});
+
+describe('解析示范例子', () => {
+  it('中文目标语言附上示范；页面已有译文时示范里也不出现【译文】', () => {
+    const p = buildAnalysisPrompt('zh-CN', true);
+    expect(p).toContain('=== Example');
+    expect(p).toContain("don't own any 后面省略了 stocks");
+    expect(p).toContain('Reference translation');
+    expect(p).not.toContain('【译文】富裕的美国人');
+    expect(buildAnalysisPrompt('zh-CN', false)).toContain('【译文】富裕的美国人');
+  });
+
+  it('详细模式的示范逐句拆解并带仿写，标准模式不带', () => {
+    expect(buildAnalysisPrompt('zh-CN', true, 'detailed')).toContain('> Wealthier Americans | have a rosier outlook.');
+    expect(buildAnalysisPrompt('zh-CN', true, 'detailed')).toContain('【仿写】');
+    expect(buildAnalysisPrompt('zh-CN', true, 'standard')).not.toContain('【仿写】');
+  });
+
+  it('非中文目标语言不附中文示范', () => {
+    expect(buildAnalysisPrompt('ja', true)).not.toContain('=== Example');
   });
 });
