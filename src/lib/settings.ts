@@ -30,6 +30,8 @@ export interface Settings {
   showFloatingButton: boolean;
   /** YouTube 双语字幕 */
   youtubeEnabled: boolean;
+  /** 把设置（含 API Key）备份到浏览器账号的同步存储，重装后自动恢复 */
+  syncSettings: boolean;
   /** 用户自定义站点规则（JSON），会覆盖同名内置规则 */
   customSiteRules: string;
 }
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   neverTranslateSites: [],
   showFloatingButton: true,
   youtubeEnabled: true,
+  syncSettings: true,
   customSiteRules: '',
 };
 

@@ -5,7 +5,8 @@ import { complete } from '@/background/providers';
 import { errorMessage, TranslationService } from '@/background/translation-service';
 import { onMessage, sendMessage } from '@/lib/messaging';
 import { providerConfigError } from '@/lib/providers';
-import { activeProviderConfig, getSettings, type Settings } from '@/lib/settings';
+import { clearBackup, readBackup, writeBackup } from '@/lib/backup';
+import { activeProviderConfig, getSettings, settingsItem, watchSettings, type Settings } from '@/lib/settings';
 
 const configError = (s: Settings) => providerConfigError(s.activeProvider, activeProviderConfig(s));
 
@@ -36,7 +37,44 @@ async function injectIntoOpenTabs() {
   }
 }
 
+/** 本地没有设置（新装或重装）时，从同步存储恢复 */
+async function restoreFromBackup() {
+  const local = await browser.storage.local.get('settings');
+  if (local.settings) return false;
+  const backup = await readBackup().catch(() => null);
+  if (!backup) return false;
+  await settingsItem.setValue(backup.settings);
+  return true;
+}
+
+/** 设置变化后（防抖）写入同步存储；关闭同步时删除备份 */
+function startBackupSync() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let last = '';
+  watchSettings((s) => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        if (!s.syncSettings) {
+          last = '';
+          await clearBackup();
+          return;
+        }
+        const json = JSON.stringify(s);
+        if (json === last) return;
+        last = json;
+        await writeBackup(s);
+      } catch (e) {
+        console.warn('[ai-translate] 同步设置失败', e);
+      }
+    }, 2000);
+  });
+}
+
 export default defineBackground(() => {
+  const restored = restoreFromBackup();
+  startBackupSync();
+
   const service = new TranslationService({ getSettings, complete, cache });
 
   onMessage('translate', ({ data }) => service.translate(data, configError));
@@ -60,6 +98,17 @@ export default defineBackground(() => {
     }
   });
 
+  onMessage('backupStatus', async () => {
+    const b = await readBackup().catch(() => null);
+    return { exists: !!b, updatedAt: b?.updatedAt ?? 0 };
+  });
+  onMessage('restoreBackup', async () => {
+    const b = await readBackup().catch(() => null);
+    if (!b) return { ok: false, message: '同步存储里没有找到备份' };
+    await settingsItem.setValue(b.settings);
+    return { ok: true, message: `已恢复 ${new Date(b.updatedAt).toLocaleString()} 的备份` };
+  });
+
   onMessage('cacheStats', async () => ({ count: await cache.count() }));
   onMessage('clearCache', async () => ({ count: await cache.clear() }));
 
@@ -80,7 +129,12 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener(({ reason }) => {
     browser.contextMenus.create({ id: 'toggle-translation', title: '翻译 / 还原此页面', contexts: ['page'] });
-    if (reason === 'install') void browser.runtime.openOptionsPage();
+    // 首次安装打开设置页；如果从同步存储恢复了配置就不打扰
+    if (reason === 'install') {
+      void restored.then((ok) => {
+        if (!ok) void browser.runtime.openOptionsPage();
+      });
+    }
     if (reason === 'install' || reason === 'update') void injectIntoOpenTabs();
   });
   browser.contextMenus.onClicked.addListener((info, tab) => {

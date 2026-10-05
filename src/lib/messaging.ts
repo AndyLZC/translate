@@ -32,6 +32,8 @@ interface ProtocolMap {
   /** 不传则测试当前使用的服务商；设置页传入正在编辑的配置 */
   testConnection(provider?: { type: ProviderType; config: ProviderConfig }): { ok: boolean; message: string };
   cacheStats(): { count: number };
+  backupStatus(): { exists: boolean; updatedAt: number };
+  restoreBackup(): { ok: boolean; message: string };
   clearCache(): { count: number };
   // popup / background → content
   toggleTranslation(): PageStatus;
