@@ -57,8 +57,7 @@ tx-loading i:nth-child(3) { animation-delay: 0.3s; }
   tx-loading i { background: #a5b4fc; }
 }
 
-/* 小标签（「解析」「重试」）：固定 11–13px、系统无衬线字体，不随网页字号放大 */
-tx-learn,
+/* 「重试」小标签：固定 11–13px、系统无衬线字体，不随网页字号放大 */
 tx-retry {
   display: inline-block;
   box-sizing: border-box;
@@ -120,13 +119,36 @@ html[data-tx-theme='italic'] tx-translation[data-tx-state='done'] {
   font-style: italic;
 }
 
-/* ---------- 学习模式：「解析」入口 ---------- */
-/* 放在原文句末；平时半透明不抢正文，鼠标移到这段上才变实 */
+/* ---------- 学习模式：「[解析]」入口 ---------- */
+/* 紧跟原文句末的文字链接：品牌靛蓝、半粗、带中括号；字号随正文但限制在 12–15px，大标题后也不会变大 */
 tx-learn {
   display: none;
+  box-sizing: border-box;
+  margin: 0 0 0 0.45em;
+  font-family: system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-style: normal;
+  white-space: nowrap;
+  text-decoration: none;
+  text-transform: none;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s, color 0.15s;
+  padding: 0;
+  border-radius: 3px;
+  background: none;
+  font-size: clamp(12px, 0.78em, 15px);
+  font-weight: 600;
+  line-height: inherit;
+  letter-spacing: 0;
+  vertical-align: baseline;
   color: #4f46e5;
-  background: rgba(99, 102, 241, 0.1);
-  opacity: 0.55;
+  opacity: 0.85;
+}
+tx-learn::before {
+  content: '[';
+}
+tx-learn::after {
+  content: ']';
 }
 html[data-tx-learn][data-tx-mode='bilingual'] tx-learn {
   display: inline-block;
@@ -136,19 +158,20 @@ tx-learn:focus-visible {
   opacity: 1;
 }
 tx-learn:hover {
-  background: rgba(99, 102, 241, 0.18);
+  color: #4338ca;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 tx-learn:focus-visible {
   outline: 2px solid rgba(99, 102, 241, 0.5);
   outline-offset: 1px;
 }
-@media (hover: none) {
-  tx-learn { opacity: 0.85; }
-}
 @media (prefers-color-scheme: dark) {
   tx-learn {
     color: #a5b4fc;
-    background: rgba(165, 180, 252, 0.14);
+  }
+  tx-learn:hover {
+    color: #c7d2fe;
   }
   tx-retry {
     color: #fca5a5;

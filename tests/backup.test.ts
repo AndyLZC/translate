@@ -45,3 +45,45 @@ describe('backup', () => {
     expect(() => importSettings('"x"', current)).toThrow();
   });
 });
+
+describe('书签备份', async () => {
+  const { decodeBackup, encodeBackup } = await import('@/lib/bookmark-backup');
+  const memoryBookmarks = () => {
+    let item: { id: string; url: string } | null = null;
+    return {
+      get item() {
+        return item;
+      },
+      find: async () => item,
+      create: async (url: string) => void (item = { id: '1', url }),
+      update: async (_id: string, url: string) => void (item = { id: '1', url }),
+      remove: async () => void (item = null),
+    };
+  };
+
+  it('加密编码：书签里看不到明文 Key，能解回原文', async () => {
+    const url = await encodeBackup('{"apiKey":"sk-secret"}');
+    expect(url.startsWith('https://ai-translate.invalid/backup#v1.')).toBe(true);
+    expect(url).not.toContain('sk-secret');
+    expect(await decodeBackup(url)).toBe('{"apiKey":"sk-secret"}');
+    expect(await decodeBackup(url.slice(0, -4) + 'AAAA')).toBeNull();
+  });
+
+  it('优先从书签恢复；sync 被清空（卸载扩展）也能找回', async () => {
+    fakeBrowser.reset();
+    const store = memoryBookmarks();
+    await writeBackup(withKey, store);
+    await fakeBrowser.storage.sync.clear(); // 模拟卸载：浏览器清空扩展存储，书签保留
+    const back = await readBackup(store);
+    expect(back?.source).toBe('bookmark');
+    expect(back?.settings.providers.deepseek.apiKey).toBe('sk-deep');
+    expect(back?.settings.activeProvider).toBe('deepseek');
+  });
+
+  it('关闭备份时删除书签', async () => {
+    const store = memoryBookmarks();
+    await writeBackup(withKey, store);
+    await clearBackup(store);
+    expect(store.item).toBeNull();
+  });
+});

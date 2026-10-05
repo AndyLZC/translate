@@ -64,7 +64,7 @@ function startBackupSync() {
         const json = JSON.stringify(s);
         if (json === last) return;
         last = json;
-        await writeBackup(s);
+        await writeBackup({ ...s, backupAt: Date.now() } as Settings);
       } catch (e) {
         console.warn('[ai-translate] 同步设置失败', e);
       }
@@ -111,11 +111,11 @@ export default defineBackground(() => {
 
   onMessage('backupStatus', async () => {
     const b = await readBackup().catch(() => null);
-    return { exists: !!b, updatedAt: b?.updatedAt ?? 0 };
+    return { exists: !!b, updatedAt: b?.updatedAt ?? 0, source: b?.source };
   });
   onMessage('restoreBackup', async () => {
     const b = await readBackup().catch(() => null);
-    if (!b) return { ok: false, message: '同步存储里没有找到备份' };
+    if (!b) return { ok: false, message: '没有找到备份（书签或浏览器同步存储里都没有）' };
     await settingsItem.setValue(b.settings);
     return { ok: true, message: `已恢复 ${new Date(b.updatedAt).toLocaleString()} 的备份` };
   });

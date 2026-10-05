@@ -1,10 +1,11 @@
 import { browser } from 'wxt/browser';
+import { clearBookmarkBackup, readBookmarkBackup, writeBookmarkBackup, type BookmarkStore, browserBookmarks } from './bookmark-backup';
 import { normalizeSettings, type Settings } from './settings';
 
 /**
- * 设置备份到浏览器的同步存储（Chrome 账号 / Firefox Sync）。
- * 卸载后 local 存储会被清空，sync 存储会保留并跟扩展 ID 绑定；
- * 扩展 ID 已在 manifest 里固定，所以重新安装后能自动恢复，包括 API Key。
+ * 设置自动备份，两处都写：
+ * 1. 浏览器书签（主）：卸载扩展不会删除书签，重装后自动恢复；登录浏览器账号时还会同步到其他电脑。
+ * 2. storage.sync（辅）：登录浏览器账号时，在其他电脑上安装也能拿到；但卸载扩展时会被浏览器一起清空。
  *
  * sync 每项最多 8KB，所以把 JSON 按字节切块存放。
  */
@@ -42,8 +43,14 @@ export function splitByBytes(text: string, maxBytes = MAX_CHUNK_BYTES): string[]
   return chunks.length ? chunks : [''];
 }
 
-export async function writeBackup(settings: Settings) {
-  const chunks = splitByBytes(JSON.stringify(settings));
+export async function writeBackup(settings: Settings, bookmarks: BookmarkStore | null = browserBookmarks) {
+  const json = JSON.stringify(settings);
+  await writeBookmarkBackup(json, bookmarks).catch((e) => console.warn('[ai-translate] 书签备份失败', e));
+  await writeSyncBackup(json);
+}
+
+async function writeSyncBackup(json: string) {
+  const chunks = splitByBytes(json);
   const old = (await browser.storage.sync.get(META))[META] as Meta | undefined;
   const items: Record<string, unknown> = { [META]: { chunks: chunks.length, updatedAt: Date.now(), version: 1 } satisfies Meta };
   chunks.forEach((c, i) => (items[CHUNK(i)] = c));
@@ -53,20 +60,34 @@ export async function writeBackup(settings: Settings) {
   }
 }
 
-export async function readBackup(): Promise<{ settings: Settings; updatedAt: number } | null> {
+export async function readBackup(bookmarks: BookmarkStore | null = browserBookmarks): Promise<{ settings: Settings; updatedAt: number; source: 'bookmark' | 'sync' } | null> {
+  const fromBookmark = await readBookmarkBackup(bookmarks).catch(() => null);
+  if (fromBookmark) {
+    try {
+      const data = JSON.parse(fromBookmark);
+      return { settings: normalizeSettings(data), updatedAt: Number(data.backupAt) || 0, source: 'bookmark' };
+    } catch {
+      /* 书签内容损坏：继续尝试 sync */
+    }
+  }
+  return readSyncBackup();
+}
+
+async function readSyncBackup(): Promise<{ settings: Settings; updatedAt: number; source: 'sync' } | null> {
   const meta = (await browser.storage.sync.get(META))[META] as Meta | undefined;
   if (!meta?.chunks) return null;
   const keys = Array.from({ length: meta.chunks }, (_, i) => CHUNK(i));
   const data = await browser.storage.sync.get(keys);
   if (keys.some((k) => typeof data[k] !== 'string')) return null;
   try {
-    return { settings: normalizeSettings(JSON.parse(keys.map((k) => data[k]).join(''))), updatedAt: meta.updatedAt };
+    return { settings: normalizeSettings(JSON.parse(keys.map((k) => data[k]).join(''))), updatedAt: meta.updatedAt, source: 'sync' };
   } catch {
     return null;
   }
 }
 
-export async function clearBackup() {
+export async function clearBackup(bookmarks: BookmarkStore | null = browserBookmarks) {
+  await clearBookmarkBackup(bookmarks).catch(() => {});
   const meta = (await browser.storage.sync.get(META))[META] as Meta | undefined;
   const keys = [META, ...Array.from({ length: meta?.chunks ?? 0 }, (_, i) => CHUNK(i))];
   await browser.storage.sync.remove(keys);

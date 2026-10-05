@@ -4,13 +4,14 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { exportSettings, importSettings } from '@/lib/backup';
+import { BACKUP_TITLE } from '@/lib/bookmark-backup';
 import { sendMessage } from '@/lib/messaging';
 import { settingsItem } from '@/lib/settings';
 import { Group, PageHeader, Row, type SectionProps } from '../layout';
 import { download } from '../util';
 
 export function DataSection({ settings, update }: SectionProps) {
-  const [backup, setBackup] = useState<{ exists: boolean; updatedAt: number } | null>(null);
+  const [backup, setBackup] = useState<{ exists: boolean; updatedAt: number; source?: 'bookmark' | 'sync' } | null>(null);
   const [cacheCount, setCacheCount] = useState<number | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -27,19 +28,21 @@ export function DataSection({ settings, update }: SectionProps) {
 
   return (
     <>
-      <PageHeader icon={<DatabaseBackup />} title="数据与备份" description="设置会自动备份到浏览器账号，重新安装插件后自动恢复，不用重新填 API Key。" />
+      <PageHeader icon={<DatabaseBackup />} title="数据与备份" description="设置（含 API Key）会自动备份，删除插件再重新安装后自动恢复，不用重新填。" />
       <div className="space-y-8">
-        <Group title="同步备份">
+        <Group title="自动备份">
           <Row
-            label="备份设置到浏览器账号（含 API Key）"
-            description="存放在 Chrome 账号 / Firefox Sync 的扩展同步存储里，只有本扩展能读取。登录浏览器账号后，重装插件或换电脑都能自动恢复。"
+            label="自动备份设置（含 API Key）"
+            description={`保存在一个名为「${BACKUP_TITLE}」的书签里（加密编码，看不到明文 Key）。卸载插件不会删除书签，重装后自动恢复；登录浏览器账号时，书签还会同步到其他电脑。关闭后会删除这个书签。`}
           >
             <Switch checked={settings.syncSettings} onCheckedChange={(v) => update({ syncSettings: v })} />
           </Row>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm">
             <span className="flex items-center gap-2 text-muted-foreground">
               {backup?.exists ? <Cloud className="size-4 text-success" /> : <CloudOff className="size-4" />}
-              {backup?.exists ? `最近备份：${new Date(backup.updatedAt).toLocaleString()}` : '同步存储里还没有备份'}
+              {backup?.exists
+                ? `最近备份：${backup.updatedAt ? new Date(backup.updatedAt).toLocaleString() : '已备份'}（${backup.source === 'bookmark' ? '书签' : '浏览器同步存储'}）`
+                : '还没有备份'}
             </span>
             <Button
               variant="outline"
@@ -117,7 +120,7 @@ export function DataSection({ settings, update }: SectionProps) {
         <Alert variant="warning">
           <AlertTitle>升级插件的推荐方式</AlertTitle>
           <AlertDescription>
-            <p>把新版本解压覆盖到原来的文件夹，然后在 chrome://extensions 点扩展上的刷新按钮，所有设置都会保留。即使删除后重新安装，开启同步备份后也会自动恢复。</p>
+            <p>把新版本解压覆盖到原来的文件夹，然后在 chrome://extensions 点扩展上的刷新按钮，所有设置都会原样保留。删除后重新安装也没关系：开启自动备份时会从书签自动恢复。</p>
           </AlertDescription>
         </Alert>
       </div>

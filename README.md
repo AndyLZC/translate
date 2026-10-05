@@ -21,7 +21,7 @@
 
 **模型与数据**
 - **多家模型**：OpenAI、DeepSeek、Claude（默认 Haiku 4.5）、任意 OpenAI 兼容接口（OpenRouter、Ollama 等），各自保存 Key，随时切换
-- **设置自动备份**：设置（含 API Key）备份到浏览器账号的同步存储，重装插件后自动恢复；也可导入/导出文件
+- **设置自动备份**：设置（含 API Key）加密编码后存进一个书签「AI 双语翻译 · 设置备份（请勿删除）」，卸载重装插件后自动恢复（浏览器卸载扩展时会清空扩展自己的存储，但不会删书签）；也可导入/导出文件
 - **用量统计**：每天每个模型的请求数和 token 数
 
 ## 安装
@@ -34,7 +34,7 @@ npm run build:firefox  # Firefox（MV3，含安卓版），产物在 .output/fir
 
 - **Chrome / Edge**：打开 `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选择 `.output/chrome-mv3`
 - **Firefox**：`about:debugging#/runtime/this-firefox` →「临时载入附加组件」→ 选择 `.output/firefox-mv3/manifest.json`
-- **升级**：把新版本解压覆盖原文件夹，在扩展管理页点刷新。扩展 ID 已固定（`khfhjjhjhclfaaabnjnecemgknfloohp`），即使删除后重装，开启同步备份时设置和 API Key 也会自动恢复
+- **升级**：把新版本解压覆盖原文件夹，在扩展管理页点刷新。扩展 ID 已固定（`khfhjjhjhclfaaabnjnecemgknfloohp`），即使删除后重装，设置和 API Key 也会从书签备份自动恢复
 
 ### 手机上使用
 
@@ -82,11 +82,11 @@ src/
 2. **批量 + 编号**：每个请求默认最多 12 段，用 `<seg id="N">` 包裹；漏掉的段落单独补翻
 3. **占位符**：`<a>链接</a>` → `<x0>链接</x0>`，翻译后还原；标签乱了退回纯文本
 4. **页面浮层都在 Shadow DOM 里**：不受网站 CSS 影响；模型输出只用 textContent 渲染，不执行 HTML
-5. **设置备份**：按字节切块写入 `storage.sync`（每项 8KB 上限），本地为空时自动恢复
+5. **设置备份**：主备份是一个书签（AES-GCM 编码，卸载扩展不受影响），辅以 `storage.sync`（按字节切块，每项 8KB 上限）；本地为空时自动恢复
 
 ## 已知限制
 
 - 「只看译文」只对整段生效
 - 只翻译顶层页面，不翻译 iframe
 - YouTube 字幕依赖播放器未公开的接口；没有字幕的视频暂不支持；Shorts 未适配
-- 同步备份依赖浏览器账号的同步功能，没登录浏览器账号时只在本机有效
+- 书签备份里的加密密钥在扩展代码中，只能防止被一眼看到，不等于强加密；手机版 Firefox 没有书签接口，只能用导出文件备份

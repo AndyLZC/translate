@@ -30,7 +30,7 @@ export interface Settings {
   showFloatingButton: boolean;
   /** YouTube 双语字幕 */
   youtubeEnabled: boolean;
-  /** 把设置（含 API Key）备份到浏览器账号的同步存储，重装后自动恢复 */
+  /** 自动备份设置（含 API Key）到浏览器书签和同步存储，卸载重装后自动恢复 */
   syncSettings: boolean;
   /** 划词翻译：icon 先显示小图标，auto 选中即翻译，off 关闭 */
   selectionMode: 'icon' | 'auto' | 'off';
@@ -89,8 +89,9 @@ interface LegacyFields {
 }
 
 /** 补齐缺省值，并把旧版单一配置迁移到对应的服务商 */
-export function normalizeSettings(stored: Partial<Settings> & LegacyFields = {}): Settings {
-  const { apiKey, baseURL, model, ...rest } = stored;
+export function normalizeSettings(stored: Partial<Settings> & LegacyFields & { backupAt?: number } = {}): Settings {
+  // backupAt 只是备份文件里的时间戳，不属于设置
+  const { apiKey, baseURL, model, backupAt: _backupAt, ...rest } = stored;
   const providers = defaultProviderConfigs();
   for (const [type, cfg] of Object.entries(stored.providers ?? {})) {
     providers[type as ProviderType] = { ...providers[type as ProviderType], ...cfg };
