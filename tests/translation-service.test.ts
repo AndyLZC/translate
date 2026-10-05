@@ -157,7 +157,7 @@ describe('学习模式', () => {
     expect(await svc.analyze({ text: 'Soil matters.' })).toEqual({ text: '【译文】Soil matters.' });
     await svc.analyze({ text: 'Soil matters.' });
     expect(complete).toHaveBeenCalledTimes(1);
-    expect(complete.mock.calls[0][0].system).toContain('【句子结构】');
+    expect(complete.mock.calls[0][0].system).toContain('【句子拆解】');
 
     const res = await svc.followUp({
       text: 'Soil matters.',
@@ -178,7 +178,7 @@ describe('交互请求单独排队', () => {
     let releasePage!: () => void;
     const pageGate = new Promise<void>((r) => (releasePage = r));
     const complete = vi.fn<CompleteFn>(async ({ prompt, system }) => {
-      if (system.includes('【句子结构】')) return '【句子结构】ok';
+      if (system.includes('【句子拆解】')) return '【句子拆解】ok';
       await pageGate; // 整页翻译的请求一直卡着
       return (prompt ?? '').replace(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g, '<seg id="$1">译</seg>');
     });
@@ -188,7 +188,7 @@ describe('交互请求单独排队', () => {
       svc.analyze({ text: 'Soil matters a lot.' }),
       new Promise((r) => setTimeout(() => r('timeout'), 500)),
     ]);
-    expect(analysis).toEqual({ text: '【句子结构】ok' });
+    expect(analysis).toEqual({ text: '【句子拆解】ok' });
     releasePage();
     await page;
   });
@@ -200,15 +200,15 @@ describe('交互请求单独排队', () => {
       complete: vi.fn<CompleteFn>(),
       stream: async (_args, onDelta) => {
         for (const p of ['【句子', '结构】', 'ok']) onDelta(p);
-        return { text: '【句子结构】ok' };
+        return { text: '【句子拆解】ok' };
       },
       cache: memoryCache(),
     });
-    expect(await svc.analyzeStream({ text: 'x y', translation: '译' }, (d) => deltas.push(d))).toEqual({ text: '【句子结构】ok' });
+    expect(await svc.analyzeStream({ text: 'x y', translation: '译' }, (d) => deltas.push(d))).toEqual({ text: '【句子拆解】ok' });
     expect(deltas).toEqual(['【句子', '结构】', 'ok']);
     const again: string[] = [];
     await svc.analyzeStream({ text: 'x y', translation: '译' }, (d) => again.push(d));
-    expect(again).toEqual(['【句子结构】ok']);
+    expect(again).toEqual(['【句子拆解】ok']);
   });
 });
 
@@ -260,5 +260,36 @@ describe('翻译风格', async () => {
   it('风格预设写进提示词', () => {
     expect(buildSystemPrompt({ ...settings, translationStyle: 'tech' })).toContain('technical documentation');
     expect(buildSystemPrompt({ ...settings, translationStyle: 'general' })).not.toContain('Style:');
+  });
+});
+
+describe('解析单独指定服务商', () => {
+  const withDeepseek = {
+    ...settings,
+    providers: { ...settings.providers, deepseek: { ...settings.providers.deepseek, apiKey: 'dk' } },
+  };
+
+  it('配置好的解析服务商用于解析和追问，翻译仍用当前服务商', async () => {
+    const complete = vi.fn<CompleteFn>(async ({ settings: s, prompt }) => (prompt?.includes('<seg') ? '<seg id="1">译</seg>' : s.activeProvider));
+    const svc = new TranslationService({ getSettings: async () => ({ ...withDeepseek, analysisProvider: 'deepseek' }), complete, cache: memoryCache() });
+    expect(await svc.analyze({ text: 'Soil matters a lot.' })).toEqual({ text: 'deepseek' });
+    expect(await svc.followUp({ text: 'x', analysis: 'y', history: [], question: 'q' })).toEqual({ text: 'deepseek' });
+    await svc.translate({ texts: ['a'] });
+    expect(complete.mock.calls.at(-1)![0].settings.activeProvider).toBe('openai');
+  });
+
+  it('解析服务商没配置 Key 时沿用翻译的服务商', async () => {
+    const complete = vi.fn<CompleteFn>(async ({ settings: s }) => s.activeProvider);
+    const svc = new TranslationService({ getSettings: async () => ({ ...settings, analysisProvider: 'deepseek' }), complete, cache: memoryCache() });
+    expect(await svc.analyze({ text: 'Soil matters a lot.' })).toEqual({ text: 'openai' });
+  });
+
+  it('详细模式逐句拆解并加仿写', async () => {
+    const complete = vi.fn<CompleteFn>(async () => 'ok');
+    const svc = new TranslationService({ getSettings: async () => ({ ...settings, analysisDepth: 'detailed' }), complete, cache: memoryCache() });
+    await svc.analyze({ text: 'Soil matters a lot.' });
+    const system = complete.mock.calls[0][0].system;
+    expect(system).toContain('Cover every sentence');
+    expect(system).toContain('【仿写】');
   });
 });

@@ -76,10 +76,16 @@ interface ProtocolMap {
   backupStatus(): { exists: boolean; updatedAt: number; source?: 'bookmark' | 'sync' };
   restoreBackup(): { ok: boolean; message: string };
   clearCache(): { count: number };
+  /** 顶层页面的翻译开关变了：background 转告同一标签页的所有 iframe */
+  frameSync(enabled: boolean): void;
+  /** iframe 启动时询问顶层页面是否正在翻译 */
+  frameState(): boolean;
   // popup / background → content
   toggleTranslation(): PageStatus;
   setTranslation(enabled: boolean): PageStatus;
   getStatus(): PageStatus;
+  /** background → iframe：跟随顶层页面开 / 关翻译 */
+  syncTranslation(enabled: boolean): void;
   /** 右键菜单：翻译选中的文字 */
   translateSelection(): void;
   /** 右键菜单：解析选中的句子 */

@@ -94,6 +94,14 @@ export class TranslationService {
     return { ...settings, activeProvider: fb };
   }
 
+  /** 解析和追问可以单独指定服务商（配置完整时才生效，否则沿用翻译的服务商） */
+  private analysisSettings(settings: Settings): Settings {
+    const ap = settings.analysisProvider;
+    if (!ap || ap === 'same' || ap === settings.activeProvider) return settings;
+    if (providerConfigError(ap, settings.providers[ap])) return settings;
+    return { ...settings, activeProvider: ap };
+  }
+
   private recordUsage(settings: Settings, input: string | ChatTurn[], usage?: Usage) {
     const p = settings.providers[settings.activeProvider];
     const chars = typeof input === 'string' ? input.length : input.reduce((n, m) => n + m.content.length, 0);
@@ -219,12 +227,12 @@ export class TranslationService {
     configError?: (s: Settings) => string | null,
     signal?: AbortSignal,
   ): Promise<{ text?: string; error?: string }> {
-    const settings = await this.deps.getSettings();
+    const settings = this.analysisSettings(await this.deps.getSettings());
     const err = configError?.(settings);
     if (err) return { error: err };
     const text = req.text.trim();
     const translation = req.translation?.trim() || undefined;
-    const system = buildAnalysisPrompt(settings.targetLang, !!translation);
+    const system = buildAnalysisPrompt(settings.targetLang, !!translation, settings.analysisDepth);
     const key = await this.analysisKey(settings, system, text);
     const [cached] = await this.deps.cache.getMany([key]);
     if (cached != null) {
@@ -249,7 +257,7 @@ export class TranslationService {
     configError?: (s: Settings) => string | null,
     signal?: AbortSignal,
   ): Promise<{ text?: string; error?: string }> {
-    const settings = await this.deps.getSettings();
+    const settings = this.analysisSettings(await this.deps.getSettings());
     const err = configError?.(settings);
     if (err) return { error: err };
     try {

@@ -1,6 +1,7 @@
 import { hasTranslatableText, isTargetLanguage } from '@/lib/language';
 import { isOwnNode, LayoutCache, OWN_TAGS } from './dom';
 import { serialize, type Serialized } from './serializer';
+import type { ScanRoot } from './shadow';
 
 export type UnitState = 'skipped' | 'pending' | 'queued' | 'loading' | 'done' | 'error';
 
@@ -73,17 +74,19 @@ export class Extractor {
     return run.length !== unit.nodes.length || run.some((n, i) => n !== unit.nodes[i]);
   }
 
-  private isExcluded = (el: Element) => !!this.config.excludeSelector && el.matches(this.config.excludeSelector);
+  isExcluded = (el: Element) => !!this.config.excludeSelector && el.matches(this.config.excludeSelector);
 
   /** 扫描 root 下所有还没处理过的段落 */
-  extract(root: Element): Unit[] {
+  extract(root: ScanRoot): Unit[] {
     const layout = new LayoutCache();
     const units: Unit[] = [];
     const { blockSelector } = this.config;
 
-    // 从 root 往上检查：root 本身在不翻译的区域里就直接返回
-    for (let el: Element | null = root; el; el = el.parentElement) {
+    // 从 root 往上检查（穿过 Shadow DOM 边界）：root 本身在不翻译的区域里就直接返回
+    for (let el: Element | null = root instanceof ShadowRoot ? root.host : root; el; ) {
       if (OWN_TAGS.has(el.tagName) || this.isExcluded(el)) return units;
+      const parent: Node | null = el.parentNode;
+      el = parent instanceof ShadowRoot ? parent.host : parent instanceof Element ? parent : null;
     }
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {

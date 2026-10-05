@@ -26,6 +26,8 @@ export interface Settings {
   targetLang: string;
   displayMode: DisplayMode;
   theme: TranslationTheme;
+  /** 双语对照时译文相对原文的字号（1 = 一样大） */
+  translationSize: number;
   /** 追加到系统提示词后面的自定义要求 */
   customPrompt: string;
   /** 每行一条：原文=译文 */
@@ -58,6 +60,10 @@ export interface Settings {
   autoTranslateForeign: boolean;
   /** 学习模式：译文后显示「解析」，可查看句子结构、词汇并追问 */
   learningMode: boolean;
+  /** 解析详细程度：standard 只拆最难的一两句；detailed 逐句拆解并给仿写例句 */
+  analysisDepth: 'standard' | 'detailed';
+  /** 解析和追问单独用的服务商（例如翻译用便宜快的模型，解析用更强的模型）；same 表示和翻译相同 */
+  analysisProvider: ProviderType | 'same';
   /** 生词高亮：生词本里的单词出现在网页上时标出，悬停看释义 */
   vocabHighlight: boolean;
   /** 当前服务商出错时自动改用的备用服务商；none 表示不切换 */
@@ -83,6 +89,7 @@ export const DEFAULT_SETTINGS: Settings = {
   targetLang: 'zh-CN',
   displayMode: 'bilingual',
   theme: 'none',
+  translationSize: 0.88,
   customPrompt: '',
   glossary: '',
   concurrency: 4,
@@ -101,6 +108,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hoverKey: 'Control',
   autoTranslateForeign: false,
   learningMode: true,
+  analysisDepth: 'standard',
+  analysisProvider: 'same',
   vocabHighlight: true,
   fallbackProvider: 'none',
   translationStyle: 'general',

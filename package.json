@@ -14,7 +14,7 @@
     "compile": "tsc --noEmit",
     "test": "vitest run",
     "postinstall": "wxt prepare",
-    "test:e2e": "wxt build && node e2e/run.mjs && node e2e/youtube.mjs && node e2e/features.mjs && node e2e/backup.mjs && node e2e/reinstall.mjs"
+    "test:e2e": "wxt build && node e2e/run.mjs && node e2e/youtube.mjs && node e2e/features.mjs && node e2e/comments.mjs && node e2e/backup.mjs && node e2e/reinstall.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.83",

@@ -1,6 +1,8 @@
-/* 译文样式：继承原文字体字号，只加一点间距；显示模式和主题由 <html> 上的属性控制 */
+/* 译文样式：继承原文字体，字号按设置缩放，只加一点间距；显示模式和主题由 <html> 上的属性控制 */
 tx-translation {
   display: block;
+  /* 译文可以比原文小一号（设置里调），行距跟着字号走 */
+  font-size: var(--tx-tsize, 1em);
   margin: 0.3em 0 0.1em;
   white-space: normal;
   word-break: normal;

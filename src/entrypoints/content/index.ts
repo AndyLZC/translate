@@ -1,5 +1,5 @@
 import { isForeignPage } from '@/lib/language';
-import { onMessage } from '@/lib/messaging';
+import { onMessage, sendMessage } from '@/lib/messaging';
 import { getSettings, updateSettings, watchSettings } from '@/lib/settings';
 import { hostMatches } from '@/lib/site-rules';
 import { AnalysisPanel } from '@/content/analysis-panel';
@@ -14,10 +14,14 @@ import './style.css';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
+  // 评论区（Disqus 等）、嵌入的文章常在 iframe 里：子框架也运行，翻译开关跟随顶层页面
+  allFrames: true,
+  matchAboutBlank: true,
   runAt: 'document_idle',
   async main(ctx) {
     if (!document.body || document.contentType !== 'text/html') return;
 
+    const isTop = window === window.top;
     let settings = await getSettings();
     setUiTheme(settings);
     const host = location.hostname;
@@ -45,7 +49,7 @@ export default defineContentScript({
 
     const inList = (list: string[]) => list.some((p) => hostMatches(host, p));
     const syncButton = () => {
-      if (settings.showFloatingButton && !inList(settings.neverTranslateSites)) button.mount();
+      if (isTop && settings.showFloatingButton && !inList(settings.neverTranslateSites)) button.mount();
       else button.unmount();
     };
     syncButton();
@@ -61,17 +65,31 @@ export default defineContentScript({
       syncButton();
     });
 
-    onMessage('toggleTranslation', () => {
-      translator.toggle();
-      return translator.status();
-    });
-    onMessage('setTranslation', ({ data }) => {
-      if (data) translator.start();
-      else translator.stop();
-      return translator.status();
-    });
-    onMessage('getStatus', () => translator.status());
-    onMessage('exportPage', () => translator.exportMarkdown());
+    if (isTop) {
+      onMessage('toggleTranslation', () => {
+        translator.toggle();
+        return translator.status();
+      });
+      onMessage('setTranslation', ({ data }) => {
+        if (data) translator.start();
+        else translator.stop();
+        return translator.status();
+      });
+      onMessage('getStatus', () => translator.status());
+      onMessage('exportPage', () => translator.exportMarkdown());
+      // 开关变化时通知各个 iframe 跟着开 / 关
+      let lastEnabled = translator.isEnabled;
+      translator.onStatus((s) => {
+        if (s.enabled === lastEnabled) return;
+        lastEnabled = s.enabled;
+        void sendMessage('frameSync', s.enabled).catch(() => {});
+      });
+    } else {
+      onMessage('syncTranslation', ({ data }) => {
+        if (data) translator.start();
+        else translator.stop();
+      });
+    }
     onMessage('translateSelection', () => selection.translateCurrentSelection());
     onMessage('analyzeSelection', () => {
       const text = window.getSelection()?.toString().trim();
@@ -90,7 +108,10 @@ export default defineContentScript({
       button.unmount();
     });
 
-    if (inList(settings.alwaysTranslateSites)) {
+    if (!isTop) {
+      // iframe 加载时顶层页面可能已经在翻译了
+      if (await sendMessage('frameState').catch(() => false)) translator.start();
+    } else if (inList(settings.alwaysTranslateSites)) {
       translator.start();
     } else if (settings.autoTranslateForeign && !inList(settings.neverTranslateSites)) {
       // 等单页应用把正文渲染出来再判断语言

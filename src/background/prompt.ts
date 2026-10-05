@@ -147,21 +147,29 @@ export function isSingleWord(text: string): boolean {
 }
 
 /**
- * 学习模式：长难句解析。固定的分节格式，方便插件渲染；每节限制条数，输出更短、更快。
+ * 学习模式：长难句解析。像老师讲题一样先讲意思和难点，再拆结构；固定的【小节】格式方便插件渲染。
  * 页面上已有译文时不再让模型重复翻译，直接作为参考给它。
  */
-export function buildAnalysisPrompt(targetLang: string, hasTranslation = false): string {
+export function buildAnalysisPrompt(targetLang: string, hasTranslation = false, depth: 'standard' | 'detailed' = 'standard'): string {
   const lang = languageName(targetLang);
+  const detailed = depth === 'detailed';
   return [
-    `You are an experienced language teacher. The user is a ${lang} speaker learning the language of the passage they send. Explain it in ${lang}, concisely.`,
-    'If the passage has several sentences, focus on the one or two hardest sentences.',
-    'Reply using exactly these sections, each heading on its own line, and nothing else:',
+    `You are a patient, experienced language teacher. The learner is a ${lang} speaker reading the passage they send. Explain it in natural, spoken ${lang}, the way a good tutor talks a student through a hard sentence: say what it means and why it is built that way, not just grammar labels.`,
+    detailed
+      ? 'Cover every sentence in the passage, in order.'
+      : 'If the passage has several sentences, give the gist of all of them but only dissect the one or two hardest sentences.',
+    'Reply using these sections, each heading on its own line:',
     ...(hasTranslation ? [] : ['【译文】a natural, faithful translation.']),
-    '【句子结构】first the main clause, one line each: "**主语**：…", "**谓语**：…", "**宾语/表语**：…" (only the parts that exist). Then at most 4 "- " items for clauses or long modifiers, each as "original words：what it is and what it modifies" in one short line.',
-    '【重点词汇】3-5 of the harder words, each as "- word /IPA/ pos. meaning in context".',
+    `【一句话看懂】1-2 sentences in plain ${lang}: what the passage is really saying and how its ideas connect (contrast, cause, concession…).`,
+    '【句子拆解】for each sentence you dissect:',
+    '  - first a line starting with "> " that copies the sentence and cuts it into meaning chunks with " | ";',
+    '  - then a line "**主干**：…" giving the bare skeleton in original words (e.g. "sentiment has risen …, while it has fallen …");',
+    `  - then ${detailed ? 'up to 5' : 'up to 4'} "- " items, each "exact original words：its role and what it attaches to, in a short natural explanation". Skip trivial parts; never write empty lines like "宾语：无".`,
+    `【难点提醒】${detailed ? '2-3' : '1-2'} "- " items on what actually trips learners up here (a word used in an unusual sense, an omitted word, a misleading conjunction, inverted order…), and how to read it correctly.`,
+    `【重点词汇】${detailed ? '4-6' : '3-5'} of the harder words, each as "- word /IPA/ pos. meaning in this context; a short note on usage if useful".`,
     '【短语搭配】at most 3 "- phrase：meaning" items. Omit the section if there are none.',
-    '【语法要点】1-2 short "- " items on the grammar worth learning here.',
-    'Quote original words exactly. Use **bold** only for the labels above. No other markdown, no greetings, no closing remarks.',
+    ...(detailed ? ['【仿写】one short new example sentence that reuses the key structure, followed by its translation on the next line.'] : []),
+    'Quote original words exactly. Use **bold** only for "主干". No other markdown, no greetings, no closing remarks, and do not repeat the translation.',
   ].join('\n');
 }
 

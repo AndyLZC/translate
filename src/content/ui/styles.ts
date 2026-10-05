@@ -81,6 +81,9 @@ button { font: inherit; color: inherit; }
 .md li::marker { color: var(--primary); font-size: .9em; }
 /* 分层：标签（主语/谓语）主题色；英文原文更亮；音标和词性弱化 */
 .md strong { color: var(--label); font-weight: 600; }
+.md .chunks { margin: 8px 0 6px; padding: 8px 12px; border-left: 3px solid var(--primary); border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--primary) 7%, transparent); color: var(--fg); line-height: 1.9; }
+.md .chunks .sep { color: var(--primary); font-weight: 700; opacity: .7; }
 .md .term { color: var(--fg); font-weight: 600; }
 .md .en { color: var(--fg); }
 .md li > .en:first-child { font-weight: 600; }

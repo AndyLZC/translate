@@ -22,6 +22,13 @@ const THEME_CLASS: Record<TranslationTheme, string> = {
   italic: 'italic',
 };
 
+const TRANSLATION_SIZES = [
+  { value: '1', label: '同原文' },
+  { value: '0.94', label: '稍小' },
+  { value: '0.88', label: '小' },
+  { value: '0.8', label: '更小' },
+];
+
 export function TranslateSection({ settings, update }: SectionProps) {
   const [prompt, setPrompt] = useDraft(settings.customPrompt);
   const [glossary, setGlossary] = useDraft(settings.glossary);
@@ -40,12 +47,20 @@ export function TranslateSection({ settings, update }: SectionProps) {
           </Row>
           <Row label="译文样式" stacked>
             <SegmentedControl value={settings.theme} onValueChange={(v) => update({ theme: v })} options={THEMES} />
-            <div className="mt-3 rounded-lg border bg-background p-4 text-sm leading-relaxed">
+            <div className="mt-3 rounded-lg border bg-background p-4 text-base leading-relaxed">
               <p>The quick brown fox jumps over the lazy dog.</p>
-              <p className="mt-1.5">
+              <p className="mt-1.5" style={{ fontSize: `${settings.translationSize}em` }}>
                 <span className={cn(THEME_CLASS[settings.theme])}>敏捷的棕色狐狸跳过了那只懒狗。</span>
               </p>
             </div>
+          </Row>
+          <Row label="译文字号" description="双语对照时译文相对原文的大小，小一号更容易分清原文和译文；「只看译文」时始终和原文一样大。">
+            <SegmentedControl
+              className="sm:w-80"
+              value={String(settings.translationSize)}
+              onValueChange={(v) => update({ translationSize: Number(v) })}
+              options={TRANSLATION_SIZES}
+            />
           </Row>
         </Group>
 

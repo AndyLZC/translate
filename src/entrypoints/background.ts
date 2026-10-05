@@ -144,6 +144,18 @@ export default defineBackground(() => {
     return { ok: true, message: `已恢复 ${new Date(b.updatedAt).toLocaleString()} 的备份` };
   });
 
+  // iframe 里的翻译跟随顶层页面
+  onMessage('frameSync', ({ data, sender }) => {
+    const tabId = sender.tab?.id;
+    if (tabId != null) void sendMessage('syncTranslation', data, tabId).catch(() => {});
+  });
+  onMessage('frameState', async ({ sender }) => {
+    const tabId = sender.tab?.id;
+    if (tabId == null) return false;
+    const s = await sendMessage('getStatus', undefined, { tabId, frameId: 0 }).catch(() => null);
+    return !!s?.enabled;
+  });
+
   onMessage('cacheStats', async () => ({ count: await cache.count() }));
   onMessage('clearCache', async () => ({ count: await cache.clear() }));
 
@@ -191,7 +203,9 @@ export default defineBackground(() => {
   browser.contextMenus?.onClicked.addListener((info, tab) => {
     if (tab?.id == null) return;
     if (info.menuItemId === 'toggle-translation') void toggleTab(tab.id);
-    if (info.menuItemId === 'translate-selection') void sendMessage('translateSelection', undefined, tab.id).catch(() => {});
-    if (info.menuItemId === 'analyze-selection') void sendMessage('analyzeSelection', undefined, tab.id).catch(() => {});
+    // 发给选中文字所在的框架（可能是 iframe）
+    const target = { tabId: tab.id, frameId: info.frameId ?? 0 };
+    if (info.menuItemId === 'translate-selection') void sendMessage('translateSelection', undefined, target).catch(() => {});
+    if (info.menuItemId === 'analyze-selection') void sendMessage('analyzeSelection', undefined, target).catch(() => {});
   });
 });

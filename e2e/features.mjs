@@ -16,19 +16,21 @@ const EXT = path.resolve('.output/chrome-mv3');
 const calls = [];
 
 const ANALYSIS = `【译文】这些不受喜爱的生物是土壤的居民。
-【句子结构】
-**主语**：These unloved critters
-**谓语**：are
-- along with countless earthworms：介词短语作伴随状语
+【一句话看懂】这些小虫和蚯蚓一起住在土壤里，而土壤恐怕是最不起眼的栖息地。
+【句子拆解】
+> These unloved critters, | along with countless earthworms, | are denizens of | what is probably the least charismatic habitat of all: | soil.
+**主干**：These unloved critters are denizens of …
+- along with countless earthworms：插入的伴随状语，补充还有谁也住在这里
+【难点提醒】
+- what 引导名词性从句，作 of 的宾语，不是疑问句
 【重点词汇】
 - denizen /ˈden.ɪ.zən/ n. 居民；栖息者
-【语法要点】
-- what 引导名词性从句`;
+`;
 
 function reply(system, messages) {
   const last = messages.at(-1).content;
   if (system.includes('concise bilingual dictionary')) return `${last} /ˈsɔɪl/\nn. 土壤；泥土\n例：Plants grow in soil. 植物生长在土壤里。`;
-  if (system.includes('【句子结构】')) return ANALYSIS;
+  if (system.includes('【句子拆解】')) return ANALYSIS;
   if (system.includes('follow-up')) return `关于「${last}」：what 在这里引导宾语从句。`;
   if (system.includes('chat box')) return 'Hello, my friend!';
   const segs = [...last.matchAll(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g)];
@@ -146,16 +148,17 @@ try {
   // 流式：先看到正在生成（带光标）的部分内容，再等全部完成
   await page.locator('tx-ui .panel .md .caret').waitFor({ timeout: 10000 });
   const partial = (await page.locator('tx-ui .panel .md').textContent()).length;
-  await page.locator('tx-ui .panel .md h4:has-text("语法要点") ~ ul li').first().waitFor({ timeout: 10000 });
+  await page.locator('tx-ui .panel .md h4:has-text("重点词汇") ~ ul li').first().waitFor({ timeout: 10000 });
   await page.waitForFunction(() => !document.querySelector('tx-ui').shadowRoot.querySelector('.panel .md .caret'), null, { timeout: 10000 });
   const full = (await page.locator('tx-ui .panel .md').textContent()).length;
-  const analyzeCall = calls.find((c) => c.system.includes('【句子结构】'));
+  const analyzeCall = calls.find((c) => c.system.includes('【句子拆解】'));
   check('解析流式输出：先显示部分内容，完成后光标消失', partial > 0 && partial < full && analyzeCall.stream, `${partial} → ${full}`);
   check('页面已有译文时不让模型重复翻译', !analyzeCall.system.includes('【译文】') && analyzeCall.messages[0].content.includes('Reference translation'));
   const orig = await page.locator('tx-ui .panel .sentence .orig').textContent();
   const sections = await page.locator('tx-ui .panel .md h4').allTextContents();
-  check('解析面板：原文、句子结构、重点词汇、语法要点', orig.startsWith('These unloved critters') && sections.join(',') === '句子结构,重点词汇,语法要点', sections.join(','));
-  check('解析面板：加粗标签渲染、不显示原始 ** 符号', (await page.locator('tx-ui .panel .md strong').first().textContent()) === '主语' && !(await page.locator('tx-ui .panel .md').textContent()).includes('**'));
+  check('解析面板：原文、一句话看懂、句子拆解、难点、词汇', orig.startsWith('These unloved critters') && sections.join(',') === '一句话看懂,句子拆解,难点提醒,重点词汇', sections.join(','));
+  check('解析面板：原句按意群切开显示', (await page.locator('tx-ui .panel .md .chunks .chunk').count()) === 5);
+  check('解析面板：加粗标签渲染、不显示原始 ** 符号', (await page.locator('tx-ui .panel .md strong').first().textContent()) === '主干' && !(await page.locator('tx-ui .panel .md').textContent()).includes('**'));
   const layers = await page.evaluate(() => {
     const md = document.querySelector('tx-ui').shadowRoot.querySelector('.panel .md');
     return { term: md.querySelector('.term')?.textContent, phon: md.querySelector('.phon')?.textContent, pos: md.querySelector('.pos')?.textContent, en: md.querySelector('li .en')?.textContent };
@@ -169,12 +172,12 @@ try {
     return a && a.textContent.includes('引导宾语从句') && !a.querySelector('.caret');
   }, null, { timeout: 10000 });
   const last = calls.at(-1);
-  check('追问 AI：带上原文和解析，多轮对话', (await page.locator('tx-ui .bubble.a').textContent()).includes('引导宾语从句') && last.messages.length === 3 && last.messages[1].content.includes('【句子结构】'));
+  check('追问 AI：带上原文和解析，多轮对话', (await page.locator('tx-ui .bubble.a').textContent()).includes('引导宾语从句') && last.messages.length === 3 && last.messages[1].content.includes('【句子拆解】'));
   if (shots) await page.screenshot({ animations: 'disabled', path: `${shots}/feat-analysis.png` });
   await page.locator('tx-ui .panel button[title="收藏到生词本"]').click();
   await page.waitForTimeout(300);
   const notes2 = await options.evaluate(async () => (await chrome.storage.local.get('notebook')).notebook ?? []);
-  check('句子收藏到生词本（含解析）', notes2[0]?.type === 'sentence' && notes2[0].analysis.includes('【句子结构】'));
+  check('句子收藏到生词本（含解析）', notes2[0]?.type === 'sentence' && notes2[0].analysis.includes('【句子拆解】'));
   await page.keyboard.press('Escape');
   check('Esc 关闭解析面板', (await page.locator('tx-ui .panel').count()) === 0);
 

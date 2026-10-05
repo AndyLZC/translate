@@ -13,6 +13,7 @@ import {
   renderTranslation,
   type RenderOptions,
 } from './renderer';
+import { adoptStyles, clearAppearance, composedContains, findShadowRoots, mirrorAppearance, type ScanRoot } from './shadow';
 import { ViewportScheduler } from './viewport';
 
 /** 网页翻译的总控：扫描段落 → 等进入可视区域 → 攒批发给 background → 渲染 */
@@ -29,6 +30,11 @@ export class PageTranslator {
   private generation = 0;
   private listeners = new Set<(s: PageStatus) => void>();
   private lastError = '';
+  /** 已接管的 shadow root（评论区等组件）及其宿主元素 */
+  private shadowRoots = new Set<ShadowRoot>();
+  private shadowHosts = new Set<Element>();
+  /** 组件常在插入页面之后才 attachShadow，变化后过一会儿再找一次 shadow root */
+  private discoverTimers: (ReturnType<typeof setTimeout> | undefined)[] = [];
 
   constructor(
     private settings: Settings,
@@ -97,6 +103,8 @@ export class PageTranslator {
     html.dataset.txMode = this.settings.displayMode;
     html.dataset.txTheme = this.settings.theme;
     html.toggleAttribute('data-tx-learn', this.settings.learningMode);
+    html.style.setProperty('--tx-tsize', `${this.settings.translationSize}em`);
+    for (const host of this.shadowHosts) mirrorAppearance(host);
   }
 
   setMode(mode: DisplayMode) {
@@ -116,8 +124,9 @@ export class PageTranslator {
       blockSelector: safeSelector(rule.blocks),
     });
     this.roots = rule.roots;
-    this.scan(this.scanRoots());
     this.watcher.start();
+    this.scan(this.scanRoots());
+    this.discoverLater(this.scanRoots());
     this.emit();
   }
 
@@ -127,6 +136,13 @@ export class PageTranslator {
     this.generation++;
     this.watcher.stop();
     this.viewport.disconnect();
+    this.discoverTimers.forEach(clearTimeout);
+    this.discoverTimers = [];
+    this.discoverPending.forEach((p) => p.clear());
+    for (const u of this.units.values()) removeTranslation(u); // shadow root 里的译文 querySelectorAll 找不到
+    this.shadowHosts.forEach(clearAppearance);
+    this.shadowHosts.clear();
+    this.shadowRoots.clear();
     clearTimeout(this.flushTimer);
     this.flushTimer = undefined;
     this.queue = [];
@@ -158,16 +174,62 @@ export class PageTranslator {
     return found.length ? found : [document.body];
   }
 
-  private scan(roots: Element[]) {
+  private scan(roots: ScanRoot[]) {
     for (const root of roots) {
-      for (const unit of this.extractor.extract(root)) {
-        this.units.set(unit.id, unit);
-        if (unit.state === 'pending') this.viewport.observe(unit);
-      }
+      this.extractFrom(root);
+      this.adoptShadowRoots(root);
     }
   }
 
-  private onDomChange(roots: Element[]) {
+  private extractFrom(root: ScanRoot) {
+    for (const unit of this.extractor.extract(root)) {
+      this.units.set(unit.id, unit);
+      if (unit.state === 'pending') this.viewport.observe(unit);
+    }
+  }
+
+  /** 找出 root 里新出现的 shadow root：注入样式、同步显示属性、监听变化，并扫描里面的段落 */
+  private adoptShadowRoots(root: ScanRoot): boolean {
+    let found = false;
+    for (const sr of findShadowRoots(root, this.extractor.isExcluded)) {
+      if (this.shadowRoots.has(sr)) continue;
+      found = true;
+      this.shadowRoots.add(sr);
+      this.shadowHosts.add(sr.host);
+      adoptStyles(sr);
+      mirrorAppearance(sr.host);
+      this.watcher.observe(sr);
+      this.extractFrom(sr);
+    }
+    return found;
+  }
+
+  /** 节流：变化后约 1.5 秒找一次、再过 2.5 秒补找一次；页面一直在变时也最多每 1.5 秒一轮 */
+  private discoverLater(roots: ScanRoot[]) {
+    roots.forEach((r) => this.discoverPending[0].add(r));
+    this.armDiscover(0);
+  }
+
+  private discoverPending: [Set<ScanRoot>, Set<ScanRoot>] = [new Set(), new Set()];
+
+  private armDiscover(stage: 0 | 1) {
+    if (this.discoverTimers[stage] !== undefined) return;
+    const gen = this.generation;
+    this.discoverTimers[stage] = setTimeout(() => {
+      this.discoverTimers[stage] = undefined;
+      const all = [...this.discoverPending[stage]].filter((r) => r.isConnected);
+      this.discoverPending[stage].clear();
+      if (gen !== this.generation || !this.enabled) return;
+      const roots = all.filter((r) => !all.some((o) => o !== r && composedContains(o, r)));
+      if (roots.map((r) => this.adoptShadowRoots(r)).some(Boolean)) this.emit();
+      if (stage === 0 && roots.length) {
+        roots.forEach((r) => this.discoverPending[1].add(r));
+        this.armDiscover(1);
+      }
+    }, stage === 0 ? 1500 : 2500);
+  }
+
+  private onDomChange(roots: ScanRoot[]) {
     if (!this.enabled) return;
     for (const unit of [...this.units.values()]) {
       const affected = !unit.block.isConnected || roots.some((r) => r.contains(unit.block) || unit.block.contains(r));
@@ -175,12 +237,14 @@ export class PageTranslator {
       this.drop(unit);
     }
     // 配置了 roots 的站点：只扫描落在这些容器内的部分
-    let scoped = roots;
+    let scoped: ScanRoot[] = roots;
     if (this.roots.length) {
       const allowed = this.scanRoots();
-      scoped = roots.flatMap((r) => (allowed.some((s) => s.contains(r)) ? [r] : allowed.filter((s) => r.contains(s))));
+      scoped = roots.flatMap((r) => (allowed.some((s) => composedContains(s, r)) ? [r] : allowed.filter((s) => r.contains(s))));
     }
-    this.scan(scoped.filter((r) => r.isConnected));
+    scoped = scoped.filter((r) => r.isConnected);
+    this.scan(scoped);
+    this.discoverLater(scoped);
     this.emit();
   }
 

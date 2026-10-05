@@ -83,6 +83,25 @@ function lineContent(text: string): DocumentFragment {
   return inline(text);
 }
 
+/** 「> a | b | c」：按意群切开的原句，每个意群一块，中间用细竖线隔开 */
+function chunks(text: string): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'chunks';
+  text.split(/\s*[|｜]\s*/).filter(Boolean).forEach((part, i) => {
+    if (i) {
+      const sep = document.createElement('span');
+      sep.className = 'sep';
+      sep.textContent = '/';
+      box.append(' ', sep, ' ');
+    }
+    const span = document.createElement('span');
+    span.className = 'chunk';
+    span.textContent = part.replace(/\*\*/g, '');
+    box.append(span);
+  });
+  return box;
+}
+
 export function renderMarkdown(text: string): DocumentFragment {
   const frag = document.createDocumentFragment();
   let list: HTMLUListElement | null = null;
@@ -90,6 +109,12 @@ export function renderMarkdown(text: string): DocumentFragment {
     const line = raw.trim();
     if (!line) {
       list = null;
+      continue;
+    }
+    const quote = line.match(/^(?:[-*•]\s+)?>\s*(.+)$/);
+    if (quote) {
+      list = null;
+      frag.append(chunks(quote[1]));
       continue;
     }
     const sec = line.match(/^【([^】]{1,12})】\s*(.*)$/);
