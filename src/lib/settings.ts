@@ -60,6 +60,8 @@ export interface Settings {
   autoTranslateForeign: boolean;
   /** 学习模式：译文后显示「解析」，可查看句子结构、词汇并追问 */
   learningMode: boolean;
+  /** 「[解析]」入口：hover 鼠标移到段落上才显示（手机上淡色常显），always 始终显示 */
+  learnTrigger: 'hover' | 'always';
   /** 解析详细程度：standard 只拆最难的一两句；detailed 逐句拆解并给仿写例句 */
   analysisDepth: 'standard' | 'detailed';
   /** 解析和追问单独用的服务商（例如翻译用便宜快的模型，解析用更强的模型）；same 表示和翻译相同 */
@@ -108,6 +110,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hoverKey: 'Control',
   autoTranslateForeign: false,
   learningMode: true,
+  learnTrigger: 'hover',
   analysisDepth: 'standard',
   analysisProvider: 'same',
   vocabHighlight: true,

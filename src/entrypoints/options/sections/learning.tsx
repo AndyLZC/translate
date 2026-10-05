@@ -38,6 +38,17 @@ export function LearningSection({ settings, update }: SectionProps) {
           <Row label="学习模式" description="在译文末尾显示「解析」，点 YouTube 字幕也能暂停并解析这一句。">
             <Switch checked={settings.learningMode} onCheckedChange={(v) => update({ learningMode: v })} />
           </Row>
+          <Row label="「解析」入口" description="悬停显示：鼠标移到段落上才出现，页面更清爽（手机上淡色常显）；始终显示：每段译文前都显示。日期、栏目名、太短的标题不显示。">
+            <SegmentedControl
+              className="sm:w-56"
+              value={settings.learnTrigger}
+              onValueChange={(v) => update({ learnTrigger: v })}
+              options={[
+                { value: 'hover', label: '悬停显示' },
+                { value: 'always', label: '始终显示' },
+              ]}
+            />
+          </Row>
           <Row label="解析详细程度" description="标准：讲大意和难点，只拆最难的一两句，速度快；详细：逐句拆解，多讲几个词，再给一个仿写例句。">
             <SegmentedControl
               className="sm:w-48"

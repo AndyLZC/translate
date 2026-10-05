@@ -59,6 +59,7 @@ const PAGES = {
   '/article': `<!doctype html><html lang="en"><head><title>Soil</title></head><body style="font:16px/1.6 sans-serif;max-width:720px;margin:40px auto">
     <p id="p1">These unloved critters, along with countless earthworms, are denizens of what is probably the least charismatic habitat of all: soil.</p>
     <p id="p2">And yet the soil and its inhabitants are the most important ecosystems of the lot, argues Frank Ashwood.</p>
+    <p id="date">MONDAY, 5 OCTOBER, 2026 — WORLD NEWS</p>
     <p id="word">Plants need <span id="w">soil</span> to grow.</p>
     <textarea id="ta" style="width:400px;height:60px"></textarea>
     <div id="ce" contenteditable="true" style="border:1px solid #ccc;min-height:30px"></div>
@@ -161,6 +162,15 @@ try {
     return { next: learn.nextElementSibling?.tagName, prev: learn.previousSibling?.textContent?.trim().slice(-5), inTranslation: !!learn.closest('tx-translation') };
   });
   check('「解析」放在原文句末、译文之前', (await page.locator('#p1 tx-learn').isVisible()) && placement.next === 'TX-TRANSLATION' && placement.prev === 'soil.' && !placement.inTranslation, JSON.stringify(placement));
+  const learnOpacity = () => page.evaluate(() => getComputedStyle(document.querySelector('#p1 tx-learn')).opacity);
+  await page.mouse.move(5, 800);
+  await page.waitForTimeout(300);
+  const restOpacity = await learnOpacity();
+  await page.locator('#p1').hover();
+  await page.waitForTimeout(300);
+  check('「解析」默认悬停才显示：平时透明，鼠标移到段落上出现', restOpacity === '0' && (await learnOpacity()) === '1', `${restOpacity} → ${await learnOpacity()}`);
+  await page.waitForFunction(() => document.querySelector('#date tx-translation')?.dataset.txState === 'done', null, { timeout: 10000 });
+  check('日期、全大写标签不显示「解析」', (await page.locator('#date tx-learn').count()) === 0 && (await page.locator('#word tx-learn').count()) === 1);
   await page.locator('#p1 tx-learn').click();
   // 流式：先看到正在生成（带光标）的部分内容，再等全部完成
   await page.locator('tx-ui .panel .md .caret').waitFor({ timeout: 10000 });

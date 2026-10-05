@@ -103,6 +103,7 @@ export class PageTranslator {
     html.dataset.txMode = this.settings.displayMode;
     html.dataset.txTheme = this.settings.theme;
     html.toggleAttribute('data-tx-learn', this.settings.learningMode);
+    html.toggleAttribute('data-tx-learn-hover', this.settings.learnTrigger !== 'always');
     html.style.setProperty('--tx-tsize', `${this.settings.translationSize}em`);
     for (const host of this.shadowHosts) mirrorAppearance(host);
   }

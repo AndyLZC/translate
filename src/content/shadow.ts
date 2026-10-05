@@ -8,7 +8,7 @@ import { OWN_TAGS } from './dom';
  */
 export type ScanRoot = Element | ShadowRoot;
 
-const APPEARANCE_ATTRS = ['data-tx-mode', 'data-tx-theme', 'data-tx-learn'];
+const APPEARANCE_ATTRS = ['data-tx-mode', 'data-tx-theme', 'data-tx-learn', 'data-tx-learn-hover'];
 
 /** 拿到元素的 shadow root：扩展可以读取 closed 模式的（Chrome: chrome.dom，Firefox: openOrClosedShadowRoot） */
 export function shadowRootOf(el: Element): ShadowRoot | null {

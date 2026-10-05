@@ -48,8 +48,19 @@ export interface RenderOptions {
   onAnalyze?: (original: string, translation: string) => void;
 }
 
-/** 太短的（菜单、按钮、标题碎片）不显示「解析」 */
-const LEARN_MIN_CHARS = 20;
+/**
+ * 值得显示「解析」的段落：至少 4 个词、20 个字符；
+ * 没有小写字母的（日期、全大写的栏目标签、署名）跳过。
+ */
+export function worthLearning(plain: string): boolean {
+  const text = plain.trim();
+  if (text.length < 20 || !/\s/.test(text)) return false;
+  if (/[A-Za-z]/.test(text)) {
+    if (!/[a-z]/.test(text)) return false;
+    if (text.split(/\s+/).filter((w) => /[A-Za-z]/.test(w)).length < 4) return false;
+  }
+  return true;
+}
 
 export function renderTranslation(unit: Unit, translated: string, opts: RenderOptions = {}) {
   const el = ensureTranslationEl(unit);
@@ -60,7 +71,7 @@ export function renderTranslation(unit: Unit, translated: string, opts: RenderOp
 
   unit.learnEl?.remove();
   unit.learnEl = undefined;
-  if (opts.onAnalyze && unit.source.plain.length >= LEARN_MIN_CHARS && /\s/.test(unit.source.plain)) {
+  if (opts.onAnalyze && worthLearning(unit.source.plain)) {
     const translation = el.textContent ?? '';
     const learn = document.createElement('tx-learn');
     learn.textContent = '解析';

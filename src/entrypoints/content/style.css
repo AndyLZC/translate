@@ -122,11 +122,11 @@ html[data-tx-theme='italic'] tx-translation[data-tx-state='done'] {
 }
 
 /* ---------- 学习模式：「[解析]」入口 ---------- */
-/* 紧跟原文句末的文字链接：品牌靛蓝、半粗、带中括号；字号随正文但限制在 12–15px，大标题后也不会变大 */
+/* 紧跟原文句末的小号文字链接，带中括号；字号随正文但限制在 11–13px，作为辅助入口不抢正文 */
 tx-learn {
   display: none;
   box-sizing: border-box;
-  margin: 0 0 0 0.45em;
+  margin: 0 0 0 0.4em;
   font-family: system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   font-style: normal;
   white-space: nowrap;
@@ -138,13 +138,13 @@ tx-learn {
   padding: 0;
   border-radius: 3px;
   background: none;
-  font-size: clamp(12px, 0.78em, 15px);
-  font-weight: 600;
+  font-size: clamp(11px, 0.7em, 13px);
+  font-weight: 500;
   line-height: inherit;
   letter-spacing: 0;
   vertical-align: baseline;
   color: var(--tx-link, #4f46e5);
-  opacity: 0.85;
+  opacity: 0.75;
 }
 tx-learn::before {
   content: '[';
@@ -158,6 +158,20 @@ html[data-tx-learn][data-tx-mode='bilingual'] tx-learn {
 *:hover > tx-learn,
 tx-learn:focus-visible {
   opacity: 1;
+}
+/* 悬停模式：平时完全透明但保留位置（出现时文字不跳动），鼠标移到这一段才显示 */
+html[data-tx-learn-hover] tx-learn {
+  opacity: 0;
+}
+html[data-tx-learn-hover] *:hover > tx-learn,
+html[data-tx-learn-hover] tx-learn:focus-visible {
+  opacity: 1;
+}
+/* 手机等没有悬停的设备：淡色常显 */
+@media (hover: none) {
+  html[data-tx-learn-hover] tx-learn {
+    opacity: 0.55;
+  }
 }
 tx-learn:hover {
   color: color-mix(in srgb, var(--tx-link, #4f46e5) 82%, #000);

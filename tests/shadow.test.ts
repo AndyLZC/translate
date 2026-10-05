@@ -75,3 +75,14 @@ describe('解析渲染：完整格式', () => {
     expect(box.querySelector('tbody .phon')?.textContent).toBe('/stretʃ/');
   });
 });
+
+describe('「解析」入口过滤', () => {
+  it('日期、栏目名、短标题不显示，正常句子显示', async () => {
+    const { worthLearning } = await import('@/content/renderer');
+    expect(worthLearning('MONDAY, 5 OCTOBER, 2026')).toBe(false);
+    expect(worthLearning('Andrew Mountbatten-Windsor')).toBe(false);
+    expect(worthLearning('Middle Eastern politics & society')).toBe(true);
+    expect(worthLearning('Trump rages as Supreme Court appointees fail to do his bidding')).toBe(true);
+    expect(worthLearning('Gulf developers bet')).toBe(false);
+  });
+});
