@@ -1,4 +1,18 @@
-import type { Settings } from '@/lib/settings';
+import type { Settings, TranslationStyle } from '@/lib/settings';
+
+/** 翻译风格预设对应的要求 */
+const STYLE_RULES: Record<TranslationStyle, string> = {
+  general: '',
+  tech: 'Style: technical documentation. Use precise, standard technical terminology; keep code, API names, commands and widely used English technical terms in English (add the translated term in parentheses on first use when helpful).',
+  academic: 'Style: academic writing. Be rigorous and formal, use standard discipline terminology, and keep citations, formulas and variable names unchanged.',
+  news: 'Style: news reporting. Be concise and objective, follow the conventions of native-language journalism, and use the established translations of names and places.',
+  fiction: 'Style: literary fiction. Preserve tone, voice, rhythm and imagery; make dialogue sound natural; translate idioms by meaning rather than word for word.',
+  casual: 'Style: casual social media. Keep it conversational and lively, preserve slang, humour and emoji, and use natural internet expressions.',
+};
+
+export function styleRule(style: TranslationStyle | undefined) {
+  return style ? STYLE_RULES[style] ?? '' : '';
+}
 
 /** 改动提示词规则时递增，让旧缓存失效 */
 export const PROMPT_VERSION = 1;
@@ -19,7 +33,7 @@ export function languageName(code: string) {
   return LANGUAGE_NAMES[code] ?? code;
 }
 
-export function buildSystemPrompt(s: Pick<Settings, 'targetLang' | 'customPrompt' | 'glossary'>): string {
+export function buildSystemPrompt(s: Pick<Settings, 'targetLang' | 'customPrompt' | 'glossary'> & { translationStyle?: TranslationStyle }): string {
   const lang = languageName(s.targetLang);
   const parts = [
     `You are a professional translator. Translate web page text into ${lang}.`,
@@ -32,6 +46,8 @@ export function buildSystemPrompt(s: Pick<Settings, 'targetLang' | 'customPrompt
     `5. Write natural, fluent ${lang} that is faithful to the source. Output only the translations: no explanations, notes or quotes around them.`,
     `6. If a segment is already in ${lang} or has nothing to translate, return it unchanged.`,
   ];
+  const style = styleRule(s.translationStyle);
+  if (style) parts.push('', style);
   const glossary = parseGlossary(s.glossary);
   if (glossary.length) {
     parts.push('', 'Glossary (always use these translations):');
@@ -82,7 +98,7 @@ export function parseSegments(output: string, count: number): Map<number, string
 
 /** 划词翻译、输入框翻译：单段文字，直接输出译文 */
 export function buildTextPrompt(
-  s: Pick<Settings, 'customPrompt' | 'glossary'>,
+  s: Pick<Settings, 'customPrompt' | 'glossary'> & { translationStyle?: TranslationStyle },
   targetLang: string,
   mode: 'selection' | 'input',
 ): string {
@@ -96,6 +112,10 @@ export function buildTextPrompt(
     parts.push(
       `The user typed this text into a chat box, comment field or email. Write natural, idiomatic ${lang} that a native speaker would send, at the same level of formality.`,
     );
+  }
+  if (mode === 'selection') {
+    const style = styleRule(s.translationStyle);
+    if (style) parts.push(style);
   }
   const glossary = parseGlossary(s.glossary);
   if (glossary.length) {

@@ -1,7 +1,7 @@
 import { Languages } from 'lucide-react';
 import { SegmentedControl } from '@/components/ui/toggle-group';
 import { Textarea } from '@/components/ui/textarea';
-import type { TranslationTheme } from '@/lib/settings';
+import { TRANSLATION_STYLES, type TranslationTheme } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 import { Group, PageHeader, Row, useDraft, type SectionProps } from '../layout';
 import { DISPLAY_MODES, LanguageSelect } from '../shared';
@@ -47,6 +47,26 @@ export function TranslateSection({ settings, update }: SectionProps) {
               </p>
             </div>
           </Row>
+        </Group>
+
+        <Group title="翻译风格" description="按内容类型调整用词和语气；网页翻译和划词翻译都会使用。">
+          <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-3">
+            {TRANSLATION_STYLES.map((st) => (
+              <button
+                key={st.value}
+                type="button"
+                aria-pressed={settings.translationStyle === st.value}
+                onClick={() => update({ translationStyle: st.value })}
+                className={cn(
+                  'cursor-pointer rounded-lg border bg-card px-3 py-2.5 text-left transition-all hover:border-primary/50',
+                  settings.translationStyle === st.value && 'border-primary bg-accent text-accent-foreground ring-[3px] ring-primary/15',
+                )}
+              >
+                <div className="text-sm font-medium">{st.label}</div>
+                <div className={cn('mt-0.5 text-xs', settings.translationStyle === st.value ? 'text-accent-foreground/80' : 'text-muted-foreground')}>{st.hint}</div>
+              </button>
+            ))}
+          </div>
         </Group>
 
         <Group title="术语表" description="每行一条，格式「原文=译文」，以 # 开头的行会被忽略。翻译时会严格使用这些译法。">

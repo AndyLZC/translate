@@ -8,7 +8,7 @@ import { onMessage, sendMessage } from '@/lib/messaging';
 import { providerConfigError } from '@/lib/providers';
 import { clearBackup, readBackup, writeBackup } from '@/lib/backup';
 import { STREAM_PORT, type StreamEvent, type StreamRequest } from '@/lib/stream';
-import { activeProviderConfig, getSettings, settingsItem, watchSettings, type Settings } from '@/lib/settings';
+import { activeProviderConfig, getSettings, settingsItem, updateSettings, watchSettings, type Settings } from '@/lib/settings';
 
 const configError = (s: Settings) => providerConfigError(s.activeProvider, activeProviderConfig(s));
 
@@ -158,6 +158,12 @@ export default defineBackground(() => {
 
   // 手机版 Firefox 没有快捷键和右键菜单 API，要先判断
   browser.commands?.onCommand.addListener(async (command, tab) => {
+    if (command === 'cycle-display-mode') {
+      const order = ['bilingual', 'translation', 'original'] as const;
+      const s = await getSettings();
+      await updateSettings({ displayMode: order[(order.indexOf(s.displayMode) + 1) % order.length] });
+      return;
+    }
     if (command !== 'toggle-translation') return;
     const id = tab?.id ?? (await browser.tabs.query({ active: true, currentWindow: true }))[0]?.id;
     await toggleTab(id);

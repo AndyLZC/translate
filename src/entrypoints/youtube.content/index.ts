@@ -1,4 +1,5 @@
 import { getSettings, watchSettings } from '@/lib/settings';
+import { setUiTheme } from '@/content/ui/theme';
 import { YouTubeSubtitles } from '@/youtube/controller';
 import './style.css';
 
@@ -7,9 +8,14 @@ export default defineContentScript({
   runAt: 'document_idle',
   allFrames: true,
   async main(ctx) {
-    const subtitles = new YouTubeSubtitles(await getSettings());
+    const settings = await getSettings();
+    setUiTheme(settings);
+    const subtitles = new YouTubeSubtitles(settings);
     subtitles.start();
-    const unwatch = watchSettings((s) => subtitles.updateSettings(s));
+    const unwatch = watchSettings((s) => {
+      setUiTheme(s);
+      subtitles.updateSettings(s);
+    });
     ctx.onInvalidated(() => {
       unwatch();
       subtitles.stop();

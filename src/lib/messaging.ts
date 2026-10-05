@@ -84,6 +84,8 @@ interface ProtocolMap {
   translateSelection(): void;
   /** 右键菜单：解析选中的句子 */
   analyzeSelection(): void;
+  /** 导出整页双语 Markdown */
+  exportPage(): { filename?: string; markdown?: string; error?: string };
   /** YouTube：导出双语字幕 */
   exportSubtitles(): { filename?: string; srt?: string; error?: string };
 }

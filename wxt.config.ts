@@ -25,6 +25,10 @@ export default defineConfig({
         suggested_key: { default: 'Alt+A' },
         description: '翻译 / 还原当前页面',
       },
+      'cycle-display-mode': {
+        suggested_key: { default: 'Alt+S' },
+        description: '切换显示方式：双语 → 只看译文 → 只看原文',
+      },
     },
     ...(browser === 'firefox' && {
       // 128 起支持 MAIN world 内容脚本（YouTube 字幕拦截需要）；同时声明支持安卓版 Firefox。

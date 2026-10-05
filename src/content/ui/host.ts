@@ -1,5 +1,6 @@
 import { OWN_TAGS } from '../dom';
 import { UI_CSS } from './styles';
+import { registerThemedHost } from './theme';
 
 /**
  * 页面里所有插件浮层（划词卡片、解析面板、提示）共用一个 Shadow DOM 宿主，
@@ -17,6 +18,7 @@ export function uiRoot(): ShadowRoot {
   style.textContent = UI_CSS;
   shadow.appendChild(style);
   document.documentElement.appendChild(hostEl);
+  registerThemedHost(hostEl);
   return shadow;
 }
 

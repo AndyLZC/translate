@@ -8,9 +8,11 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { SegmentedControl } from '@/components/ui/toggle-group';
 import { dayKey, USAGE_KEY, type UsageData } from '@/background/usage';
+import { formatMoney } from '@/lib/pricing';
+import { monthDays, summarize } from '@/lib/usage-summary';
 import { sendMessage, type PageStatus } from '@/lib/messaging';
 import { PROVIDERS, providerConfigError, providerPreset, type ProviderType } from '@/lib/providers';
-import { activeProviderConfig, updateProvider } from '@/lib/settings';
+import { activeProviderConfig, TRANSLATION_STYLES, updateProvider, type TranslationStyle } from '@/lib/settings';
 import { hostMatches } from '@/lib/site-rules';
 import { useSettings } from '@/lib/use-settings';
 import { cn } from '@/lib/utils';
@@ -22,7 +24,7 @@ export default function App() {
   const [url, setUrl] = useState<URL | null>(null);
   const [status, setStatus] = useState<PageStatus | null>(null);
   const [unsupported, setUnsupported] = useState(false);
-  const [todayRequests, setTodayRequests] = useState(0);
+  const [usage, setUsage] = useState<UsageData>({});
   const [exportMsg, setExportMsg] = useState('');
 
   useEffect(() => {
@@ -42,10 +44,7 @@ export default function App() {
         setUnsupported(true);
       }
     })();
-    void browser.storage.local.get(USAGE_KEY).then((r) => {
-      const day = (r[USAGE_KEY] as UsageData | undefined)?.[dayKey()] ?? {};
-      setTodayRequests(Object.values(day).reduce((n, e) => n + e.requests, 0));
-    });
+    void browser.storage.local.get(USAGE_KEY).then((r) => setUsage((r[USAGE_KEY] as UsageData | undefined) ?? {}));
   }, []);
 
   // 翻译进行中刷新进度
@@ -64,6 +63,10 @@ export default function App() {
   if (!settings) return <div className="h-[480px] w-[360px]" />;
 
   const host = url?.hostname ?? '';
+  const costOpts = { currency: settings.currency, usdToCny: settings.usdToCny };
+  const today = summarize(usage, [dayKey()], settings.customPrices, costOpts);
+  const month = summarize(usage, monthDays(usage), settings.customPrices, costOpts);
+  const budgetPct = settings.monthlyBudget > 0 ? month.cost / settings.monthlyBudget : 0;
   const provider = activeProviderConfig(settings);
   const preset = providerPreset(settings.activeProvider);
   const setupError = providerConfigError(settings.activeProvider, provider);
@@ -80,6 +83,21 @@ export default function App() {
   const toggle = async () => {
     if (tabId == null) return;
     setStatus(await sendMessage('toggleTranslation', undefined, tabId));
+  };
+
+  const download = (filename: string, content: string, type: string) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type: `${type};charset=utf-8` }));
+    a.download = filename;
+    a.click();
+  };
+
+  const exportPage = async () => {
+    if (tabId == null) return;
+    const res = await sendMessage('exportPage', undefined, tabId).catch((e) => ({ error: String(e) }) as { error: string; markdown?: string; filename?: string });
+    if (!res?.markdown) return setExportMsg(res?.error ?? '导出失败');
+    download(res.filename ?? 'page.md', res.markdown, 'text/markdown');
+    setExportMsg('已导出');
   };
 
   const exportSrt = async () => {
@@ -118,6 +136,17 @@ export default function App() {
                 <button className="font-medium underline underline-offset-2" onClick={() => openOptions('#models')}>
                   去设置
                 </button>
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {budgetPct >= 0.8 && (
+          <Alert variant={budgetPct >= 1 ? 'destructive' : 'warning'}>
+            <CircleAlert />
+            <AlertDescription>
+              <p>
+                本月已用 {formatMoney(month.cost, settings.currency)}，{budgetPct >= 1 ? '已超出' : '接近'}预算 {formatMoney(settings.monthlyBudget, settings.currency)}。
               </p>
             </AlertDescription>
           </Alert>
@@ -187,9 +216,26 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">翻译成</span>
-          <LanguageSelect size="sm" className="w-40 sm:w-40" value={settings.targetLang} onChange={(v) => update({ targetLang: v })} />
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <div className="text-xs text-muted-foreground">翻译成</div>
+            <LanguageSelect size="sm" className="w-full sm:w-full" value={settings.targetLang} onChange={(v) => update({ targetLang: v })} />
+          </div>
+          <div className="space-y-1.5">
+            <div className="text-xs text-muted-foreground">翻译风格</div>
+            <Select value={settings.translationStyle} onValueChange={(v) => update({ translationStyle: v as TranslationStyle })}>
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSLATION_STYLES.map((st) => (
+                  <SelectItem key={st.value} value={st.value}>
+                    {st.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <Separator />
@@ -205,14 +251,22 @@ export default function App() {
           <ToggleRow icon={<GraduationCap />} label="学习模式（句子解析）" checked={settings.learningMode} onChange={(on) => update({ learningMode: on })} />
         </div>
 
-        {isYouTube && (
+        {(isYouTube || !!status?.done) && (
           <>
             <Separator />
-            <div className="flex items-center justify-between gap-2">
-              <Button variant="outline" size="sm" onClick={exportSrt}>
-                <Download />
-                导出双语字幕 SRT
-              </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {!!status?.done && (
+                <Button variant="outline" size="sm" onClick={exportPage}>
+                  <Download />
+                  导出双语 Markdown
+                </Button>
+              )}
+              {isYouTube && (
+                <Button variant="outline" size="sm" onClick={exportSrt}>
+                  <Download />
+                  导出字幕 SRT
+                </Button>
+              )}
               {exportMsg && <span className="text-xs text-muted-foreground">{exportMsg}</span>}
             </div>
           </>
@@ -220,7 +274,9 @@ export default function App() {
       </div>
 
       <footer className="flex items-center justify-between border-t px-4 py-2.5 text-xs text-muted-foreground">
-        <span>今日 {todayRequests} 次请求</span>
+        <button className="cursor-pointer hover:text-foreground" onClick={() => openOptions('#usage')} title="查看用量与费用">
+          今日 {formatMoney(today.cost, settings.currency)} · {today.requests} 次请求
+        </button>
         <button className="cursor-pointer hover:text-foreground" onClick={() => openOptions('#learning')}>
           生词本 →
         </button>

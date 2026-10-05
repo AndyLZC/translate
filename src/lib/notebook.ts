@@ -12,6 +12,30 @@ export interface NoteEntry {
   url: string;
   title: string;
   createdAt: number;
+  /** 复习：所在的盒子（0 = 新词）和下次复习时间 */
+  box?: number;
+  due?: number;
+}
+
+/** 间隔复习（Leitner）：答对进下一个盒子，间隔变长；答错回到第一个 */
+export const REVIEW_INTERVALS_DAYS = [0, 1, 2, 4, 7, 15, 30];
+const DAY = 86_400_000;
+
+export function isDue(n: NoteEntry, now = Date.now()) {
+  return (n.due ?? 0) <= now;
+}
+
+export function nextReview(n: NoteEntry, grade: 'again' | 'hard' | 'good', now = Date.now()): Pick<NoteEntry, 'box' | 'due'> {
+  const box = n.box ?? 0;
+  const next = grade === 'again' ? 0 : grade === 'hard' ? Math.max(1, box) : Math.min(box + 1, REVIEW_INTERVALS_DAYS.length - 1);
+  // 答错 10 分钟后再出现；其余按盒子对应的天数
+  const due = grade === 'again' ? now + 10 * 60_000 : now + REVIEW_INTERVALS_DAYS[next] * DAY;
+  return { box: next, due };
+}
+
+export async function gradeNote(id: string, grade: 'again' | 'hard' | 'good') {
+  const notes = await listNotes();
+  await browser.storage.local.set({ [KEY]: notes.map((n) => (n.id === id ? { ...n, ...nextReview(n, grade) } : n)) });
 }
 
 const KEY = 'notebook';

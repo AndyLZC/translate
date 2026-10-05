@@ -36,7 +36,7 @@ tx-loading i {
   height: clamp(4px, 0.28em, 5px);
   margin-bottom: clamp(2px, 0.12em, 4px);
   border-radius: 50%;
-  background: #6366f1;
+  background: var(--tx-link, #4f46e5);
   opacity: 0.35;
   animation: tx-wave 1.2s ease-in-out infinite;
 }
@@ -54,7 +54,7 @@ tx-loading i:nth-child(3) { animation-delay: 0.3s; }
   50% { opacity: 1; }
 }
 @media (prefers-color-scheme: dark) {
-  tx-loading i { background: #a5b4fc; }
+  tx-loading i { background: var(--tx-link-d, #a5b4fc); }
 }
 
 /* 「重试」小标签：固定 11–13px、系统无衬线字体，不随网页字号放大 */
@@ -141,7 +141,7 @@ tx-learn {
   line-height: inherit;
   letter-spacing: 0;
   vertical-align: baseline;
-  color: #4f46e5;
+  color: var(--tx-link, #4f46e5);
   opacity: 0.85;
 }
 tx-learn::before {
@@ -158,23 +158,36 @@ tx-learn:focus-visible {
   opacity: 1;
 }
 tx-learn:hover {
-  color: #4338ca;
+  color: color-mix(in srgb, var(--tx-link, #4f46e5) 82%, #000);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 tx-learn:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.5);
+  outline: 2px solid color-mix(in srgb, var(--tx-link, #4f46e5) 50%, transparent);
   outline-offset: 1px;
 }
 @media (prefers-color-scheme: dark) {
   tx-learn {
-    color: #a5b4fc;
+    color: var(--tx-link-d, #a5b4fc);
   }
   tx-learn:hover {
-    color: #c7d2fe;
+    color: color-mix(in srgb, var(--tx-link-d, #a5b4fc) 80%, #fff);
   }
   tx-retry {
     color: #fca5a5;
     background: rgba(252, 165, 165, 0.12);
+  }
+}
+
+/* ---------- 生词高亮（CSS Custom Highlight API，不改网页 DOM） ---------- */
+::highlight(tx-vocab) {
+  background-color: color-mix(in srgb, var(--tx-link, #4f46e5) 13%, transparent);
+  text-decoration: underline dotted color-mix(in srgb, var(--tx-link, #4f46e5) 70%, transparent);
+  text-decoration-thickness: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  ::highlight(tx-vocab) {
+    background-color: color-mix(in srgb, var(--tx-link-d, #a5b4fc) 18%, transparent);
+    text-decoration-color: color-mix(in srgb, var(--tx-link-d, #a5b4fc) 70%, transparent);
   }
 }

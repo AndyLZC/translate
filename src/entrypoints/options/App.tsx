@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Bot, ChartColumn, DatabaseBackup, Globe, GraduationCap, Info, Languages, MonitorPlay, TextCursorInput } from 'lucide-react';
+import { Bot, ChartColumn, DatabaseBackup, Globe, GraduationCap, Info, Languages, MonitorPlay, Palette, TextCursorInput } from 'lucide-react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useSettings } from '@/lib/use-settings';
 import { cn } from '@/lib/utils';
 import { AboutSection } from './sections/about';
+import { AppearanceSection } from './sections/appearance';
 import { DataSection } from './sections/data';
 import { LearningSection } from './sections/learning';
 import { ModelsSection } from './sections/models';
@@ -20,7 +21,8 @@ const NAV = [
   { id: 'selection', label: '划词与输入', icon: <TextCursorInput /> },
   { id: 'learning', label: '学习', icon: <GraduationCap /> },
   { id: 'youtube', label: 'YouTube', icon: <MonitorPlay /> },
-  { id: 'usage', label: '用量', icon: <ChartColumn /> },
+  { id: 'appearance', label: '外观', icon: <Palette /> },
+  { id: 'usage', label: '用量与费用', icon: <ChartColumn /> },
   { id: 'data', label: '数据与备份', icon: <DatabaseBackup /> },
   { id: 'about', label: '帮助', icon: <Info /> },
 ] as const;
@@ -56,7 +58,8 @@ export default function App() {
     selection: <SelectionSection {...props} />,
     learning: <LearningSection {...props} />,
     youtube: <YouTubeSection {...props} />,
-    usage: <UsageSection />,
+    appearance: <AppearanceSection {...props} />,
+    usage: <UsageSection {...props} />,
     data: <DataSection {...props} />,
     about: <AboutSection />,
   };

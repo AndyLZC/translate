@@ -8,6 +8,8 @@ import { FloatingButton } from '@/content/floating-button';
 import { HoverTranslator } from '@/content/hover-translate';
 import { InputTranslator } from '@/content/input-translate';
 import { SelectionTranslator } from '@/content/selection';
+import { setUiTheme } from '@/content/ui/theme';
+import { VocabHighlighter } from '@/content/vocab-highlight';
 import './style.css';
 
 export default defineContentScript({
@@ -17,6 +19,7 @@ export default defineContentScript({
     if (!document.body || document.contentType !== 'text/html') return;
 
     let settings = await getSettings();
+    setUiTheme(settings);
     const host = location.hostname;
     const panel = new AnalysisPanel();
     const renderOptions = { onAnalyze: (text: string, translation: string) => void panel.open({ text, translation }) };
@@ -24,9 +27,11 @@ export default defineContentScript({
     const selection = new SelectionTranslator(settings, panel);
     const input = new InputTranslator(settings);
     const hover = new HoverTranslator(settings, () => translator.isEnabled, renderOptions);
+    const vocab = new VocabHighlighter(settings);
     selection.start();
     input.start();
     hover.start();
+    vocab.start();
 
     const button = new FloatingButton({
       onToggle: () => translator.toggle(),
@@ -47,10 +52,12 @@ export default defineContentScript({
 
     const unwatch = watchSettings((s) => {
       settings = s;
+      setUiTheme(s);
       translator.updateSettings(s);
       selection.updateSettings(s);
       input.updateSettings(s);
       hover.updateSettings(s);
+      vocab.updateSettings(s);
       syncButton();
     });
 
@@ -64,6 +71,7 @@ export default defineContentScript({
       return translator.status();
     });
     onMessage('getStatus', () => translator.status());
+    onMessage('exportPage', () => translator.exportMarkdown());
     onMessage('translateSelection', () => selection.translateCurrentSelection());
     onMessage('analyzeSelection', () => {
       const text = window.getSelection()?.toString().trim();
@@ -77,6 +85,7 @@ export default defineContentScript({
       selection.stop();
       input.stop();
       hover.stop();
+      vocab.stop();
       panel.close();
       button.unmount();
     });

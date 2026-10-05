@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { sendMessage } from '@/lib/messaging';
 import { PROVIDERS, providerConfigError, providerPreset, type ProviderType } from '@/lib/providers';
@@ -69,6 +70,25 @@ export function ModelsSection({ settings, update }: SectionProps) {
       <ProviderEditor key={tab} type={tab} settings={settings} update={update} />
 
       <div className="space-y-8">
+      <Group title="备用服务商">
+        <Row label="出错时自动切换到" description="当前服务商额度用完、限流或服务异常时，自动用这家再试一次，翻译不中断。只能选已配置好的服务商。">
+          <Select value={settings.fallbackProvider} onValueChange={(v) => update({ fallbackProvider: v as SectionProps['settings']['fallbackProvider'] })}>
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">不切换</SelectItem>
+              {PROVIDERS.filter((p) => p.type !== settings.activeProvider).map((p) => (
+                <SelectItem key={p.type} value={p.type} disabled={!!providerConfigError(p.type, settings.providers[p.type])}>
+                  {p.label}
+                  {providerConfigError(p.type, settings.providers[p.type]) ? '（未配置）' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Row>
+      </Group>
+
       <Group title="生成参数">
         <Row label={`温度 ${settings.temperature.toFixed(1)}`} description="越低越稳定，翻译建议 0～0.3。Claude Sonnet / Opus 新模型不支持调整，会自动忽略。">
           <Slider className="w-full sm:w-56" min={0} max={1} step={0.1} value={[settings.temperature]} onValueChange={([v]) => update({ temperature: v })} />

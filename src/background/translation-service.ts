@@ -8,6 +8,7 @@ import type {
   TranslateTextRequest,
   TranslateTextResponse,
 } from '@/lib/messaging';
+import { providerConfigError } from '@/lib/providers';
 import type { Settings } from '@/lib/settings';
 import {
   buildAnalysisInput,
@@ -85,15 +86,35 @@ export class TranslationService {
   }
 
   /** 调模型并记录用量 */
-  private async call(system: string, input: string | ChatTurn[], settings: Settings): Promise<string> {
-    const res = await this.deps.complete(
-      typeof input === 'string' ? { system, prompt: input, settings } : { system, messages: input, settings },
-    );
-    const out = typeof res === 'string' ? { text: res } : res;
+  /** 备用服务商：配置完整且不是当前服务商时才可用 */
+  private fallbackSettings(settings: Settings): Settings | null {
+    const fb = settings.fallbackProvider;
+    if (!fb || fb === 'none' || fb === settings.activeProvider) return null;
+    if (providerConfigError(fb, settings.providers[fb])) return null;
+    return { ...settings, activeProvider: fb };
+  }
+
+  private recordUsage(settings: Settings, input: string | ChatTurn[], usage?: Usage) {
     const p = settings.providers[settings.activeProvider];
     const chars = typeof input === 'string' ? input.length : input.reduce((n, m) => n + m.content.length, 0);
-    this.deps.onUsage?.({ model: `${settings.activeProvider}/${p.model}`, chars, usage: out.usage });
-    return out.text;
+    this.deps.onUsage?.({ model: `${settings.activeProvider}/${p.model}`, chars, usage });
+  }
+
+  /** 调模型并记录用量；当前服务商出错时，用备用服务商再试一次 */
+  private async call(system: string, input: string | ChatTurn[], settings: Settings): Promise<string> {
+    const once = async (s: Settings) => {
+      const res = await this.deps.complete(typeof input === 'string' ? { system, prompt: input, settings: s } : { system, messages: input, settings: s });
+      const out = typeof res === 'string' ? { text: res } : res;
+      this.recordUsage(s, input, out.usage);
+      return out.text;
+    };
+    try {
+      return await once(settings);
+    } catch (e) {
+      const fb = this.fallbackSettings(settings);
+      if (!fb) throw e;
+      return once(fb);
+    }
   }
 
   /** 学习模式：句子解析（一次性返回） */
@@ -170,12 +191,25 @@ export class TranslationService {
       onDelta(text);
       return text;
     }
-    const args = typeof input === 'string' ? { system, prompt: input, settings, signal } : { system, messages: input, settings, signal };
-    const out = await this.deps.stream(args, onDelta);
-    const p = settings.providers[settings.activeProvider];
-    const chars = typeof input === 'string' ? input.length : input.reduce((n, m) => n + m.content.length, 0);
-    this.deps.onUsage?.({ model: `${settings.activeProvider}/${p.model}`, chars, usage: out.usage });
-    return out.text;
+    const stream = this.deps.stream;
+    let emitted = false;
+    const once = async (s: Settings) => {
+      const args = typeof input === 'string' ? { system, prompt: input, settings: s, signal } : { system, messages: input, settings: s, signal };
+      const out = await stream(args, (d) => {
+        emitted = true;
+        onDelta(d);
+      });
+      this.recordUsage(s, input, out.usage);
+      return out.text;
+    };
+    try {
+      return await once(settings);
+    } catch (e) {
+      // 已经输出了一部分、或者是用户取消的，不再切换（避免重复内容）
+      const fb = this.fallbackSettings(settings);
+      if (!fb || emitted || signal?.aborted) throw e;
+      return once(fb);
+    }
   }
 
   /** 解析（流式）：命中缓存时一次性返回全文 */

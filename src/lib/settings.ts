@@ -1,5 +1,18 @@
 import { storage } from 'wxt/utils/storage';
+import type { ModelPrice } from './pricing';
 import { defaultProviderConfigs, type ProviderConfig, type ProviderType } from './providers';
+import type { Appearance, ThemeId } from './themes';
+
+export type TranslationStyle = 'general' | 'tech' | 'academic' | 'news' | 'fiction' | 'casual';
+
+export const TRANSLATION_STYLES: { value: TranslationStyle; label: string; hint: string }[] = [
+  { value: 'general', label: '通用', hint: '自然流畅，忠实原文' },
+  { value: 'tech', label: '技术文档', hint: '术语准确，代码和专有名词保留英文' },
+  { value: 'academic', label: '学术论文', hint: '严谨正式，术语规范' },
+  { value: 'news', label: '新闻资讯', hint: '简洁客观，符合中文新闻写法' },
+  { value: 'fiction', label: '小说文学', hint: '保留语气和文采，对话自然' },
+  { value: 'casual', label: '社交口语', hint: '轻松口语化，保留网络用语的味道' },
+];
 
 export type DisplayMode = 'bilingual' | 'translation' | 'original';
 export type TranslationTheme = 'none' | 'underline' | 'dim' | 'highlight' | 'italic';
@@ -45,6 +58,20 @@ export interface Settings {
   autoTranslateForeign: boolean;
   /** 学习模式：译文后显示「解析」，可查看句子结构、词汇并追问 */
   learningMode: boolean;
+  /** 生词高亮：生词本里的单词出现在网页上时标出，悬停看释义 */
+  vocabHighlight: boolean;
+  /** 当前服务商出错时自动改用的备用服务商；none 表示不切换 */
+  fallbackProvider: ProviderType | 'none';
+  /** 翻译风格预设 */
+  translationStyle: TranslationStyle;
+  /** 主题色、外观（跟随系统 / 浅色 / 深色） */
+  accentTheme: ThemeId;
+  appearance: Appearance;
+  /** 费用估算：显示币种、汇率、自定义单价（每百万 token）、每月预算（0 表示不设） */
+  currency: 'CNY' | 'USD';
+  usdToCny: number;
+  customPrices: Record<string, ModelPrice>;
+  monthlyBudget: number;
   /** 用户自定义站点规则（JSON），会覆盖同名内置规则 */
   customSiteRules: string;
 }
@@ -74,6 +101,15 @@ export const DEFAULT_SETTINGS: Settings = {
   hoverKey: 'Control',
   autoTranslateForeign: false,
   learningMode: true,
+  vocabHighlight: true,
+  fallbackProvider: 'none',
+  translationStyle: 'general',
+  accentTheme: 'indigo',
+  appearance: 'system',
+  currency: 'CNY',
+  usdToCny: 7.1,
+  customPrices: {},
+  monthlyBudget: 0,
   customSiteRules: '',
 };
 

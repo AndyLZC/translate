@@ -26,6 +26,7 @@
   --border: oklch(0.92 0.006 270);
   --input: oklch(0.9 0.008 270);
   --ring: oklch(0.6 0.18 277);
+  --link: #4f46e5;
 }
 
 /* 深色 */
@@ -50,6 +51,7 @@
   --border: oklch(1 0 0 / 9%);
   --input: oklch(1 0 0 / 14%);
   --ring: oklch(0.65 0.17 277);
+  --link: #a5b4fc;
 }
 
 @theme inline {
@@ -77,6 +79,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-link: var(--link);
   --font-sans: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 

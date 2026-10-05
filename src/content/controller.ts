@@ -264,6 +264,21 @@ export class PageTranslator {
     this.enqueue([unit]);
   }
 
+  /** 导出整页双语 Markdown：已翻译的段落按页面顺序，原文作引用、译文跟在后面 */
+  exportMarkdown(): { filename?: string; markdown?: string; error?: string } {
+    const done = [...this.units.values()].filter((u) => u.state === 'done' && u.translationEl?.isConnected);
+    if (!done.length) return { error: '页面还没有翻译完成的段落' };
+    done.sort((a, b) => (a.translationEl!.compareDocumentPosition(b.translationEl!) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    const quote = (t: string) => t.split('\n').map((l) => `> ${l}`).join('\n');
+    const parts = [`# ${document.title}`, '', `来源：<${location.href}>`, ''];
+    for (const u of done) {
+      const translation = (u.translationEl!.textContent ?? '').trim();
+      parts.push(quote(u.source.plain), '', translation, '');
+    }
+    const title = document.title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || location.hostname;
+    return { filename: `${title}（双语）.md`, markdown: parts.join('\n') };
+  }
+
   retryFailed() {
     this.enqueue([...this.units.values()].filter((u) => u.state === 'error').map((u) => ((u.state = 'pending'), u)));
   }

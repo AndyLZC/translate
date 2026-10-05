@@ -211,3 +211,54 @@ describe('交互请求单独排队', () => {
     expect(again).toEqual(['【句子结构】ok']);
   });
 });
+
+describe('备用服务商', () => {
+  const withFallback = {
+    ...settings,
+    fallbackProvider: 'deepseek' as const,
+    providers: { ...settings.providers, deepseek: { apiKey: 'k2', baseURL: '', model: 'deepseek-chat' } },
+  };
+
+  it('当前服务商出错时用备用服务商重试，并按备用服务商记用量', async () => {
+    const used: string[] = [];
+    const complete = vi.fn<CompleteFn>(async ({ prompt, settings: s }) => {
+      if (s.activeProvider === 'openai') throw Object.assign(new Error('quota'), { statusCode: 429 });
+      return (prompt ?? '').replace(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g, '<seg id="$1">备:$2</seg>');
+    });
+    const svc = new TranslationService({ getSettings: async () => withFallback, complete, cache: memoryCache(), onUsage: (u) => used.push(u.model) });
+    expect((await svc.translate({ texts: ['a'] })).translations).toEqual(['备:a']);
+    expect(used).toEqual(['deepseek/deepseek-chat']);
+  });
+
+  it('备用服务商没配置好时不切换', async () => {
+    const complete = vi.fn<CompleteFn>(async () => {
+      throw new Error('down');
+    });
+    const svc = new TranslationService({
+      getSettings: async () => ({ ...withFallback, providers: { ...withFallback.providers, deepseek: { apiKey: '', baseURL: '', model: 'deepseek-chat' } } }),
+      complete,
+      cache: memoryCache(),
+    });
+    expect((await svc.translate({ texts: ['a'] })).translations).toEqual([null]);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('流式输出到一半出错不切换，避免重复内容', async () => {
+    const streamFn = vi.fn(async (_a: unknown, onDelta: (t: string) => void) => {
+      onDelta('部分');
+      throw new Error('cut');
+    });
+    const svc = new TranslationService({ getSettings: async () => withFallback, complete: vi.fn<CompleteFn>(), stream: streamFn, cache: memoryCache() });
+    const res = await svc.analyzeStream({ text: 'x y' }, () => {});
+    expect(res.error).toBe('cut');
+    expect(streamFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('翻译风格', async () => {
+  const { buildSystemPrompt } = await import('@/background/prompt');
+  it('风格预设写进提示词', () => {
+    expect(buildSystemPrompt({ ...settings, translationStyle: 'tech' })).toContain('technical documentation');
+    expect(buildSystemPrompt({ ...settings, translationStyle: 'general' })).not.toContain('Style:');
+  });
+});

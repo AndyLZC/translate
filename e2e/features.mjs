@@ -178,6 +178,21 @@ try {
   await page.keyboard.press('Escape');
   check('Esc 关闭解析面板', (await page.locator('tx-ui .panel').count()) === 0);
 
+  // ---------- 导出整页双语 Markdown ----------
+  const exported = await options.evaluate(async (url) => {
+    const [tab] = await chrome.tabs.query({ url });
+    return chrome.tabs.sendMessage(tab.id, { id: 99, type: 'exportPage', timestamp: Date.now() });
+  }, `${base}/article`);
+  const md = exported?.res?.markdown ?? '';
+  check('导出双语 Markdown：原文引用 + 译文，按页面顺序', md.startsWith('# ') && md.indexOf('> These unloved critters') > 0 && md.indexOf('【译】These unloved') > md.indexOf('> These unloved') && md.indexOf('> And yet') > md.indexOf('> These unloved'), md.slice(0, 80).replace(/\n/g, ' | '));
+
+  // ---------- 主题色：网页上的「[解析]」跟着变 ----------
+  await setSettings({ accentTheme: 'emerald' });
+  await page.waitForTimeout(400);
+  const learnColor = await page.evaluate(() => getComputedStyle(document.querySelector('#p1 tx-learn')).color);
+  check('切换主题色后「[解析]」颜色跟着变（翠绿）', learnColor === 'rgb(4, 120, 87)', learnColor);
+  await setSettings({ accentTheme: 'indigo' });
+
   // 关闭学习模式后「解析」隐藏
   await setSettings({ learningMode: false });
   await page.waitForTimeout(300);
@@ -220,6 +235,16 @@ try {
   await page.keyboard.up('Control');
   await page.waitForTimeout(300);
   check('再按一次 Ctrl 收起', (await page.locator('tx-translation').count()) === 0);
+
+  // ---------- 生词高亮：生词本里的 soil 在网页上标出，悬停显示释义 ----------
+  await page.waitForFunction(() => CSS.highlights?.get('tx-vocab')?.size > 0, null, { timeout: 8000 });
+  const vocabCount = await page.evaluate(() => CSS.highlights.get('tx-vocab').size);
+  check('生词高亮：网页上的 soil 都被标出（不改动网页 DOM）', vocabCount >= 3 && (await page.locator('#w').evaluate((el) => el.childNodes.length)) === 1, `${vocabCount} 处`);
+  const w = await page.locator('#w').boundingBox();
+  await page.mouse.move(w.x + w.width / 2, w.y + w.height / 2);
+  await page.locator('tx-ui .vocab-tip').waitFor({ timeout: 5000 });
+  check('悬停生词显示释义', (await page.locator('tx-ui .vocab-tip .word').textContent()).includes('soil'));
+  await page.mouse.move(5, 5);
 
   // ---------- 自动翻译外语网页 ----------
   await setSettings({ autoTranslateForeign: true });

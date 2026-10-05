@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { SegmentedControl } from '@/components/ui/toggle-group';
 import { listNotes, notesToCsv, removeNote, watchNotes, type NoteEntry } from '@/lib/notebook';
 import { Group, PageHeader, Row, type SectionProps } from '../layout';
+import { Review } from './review';
 import { download } from '../util';
 
 export function LearningSection({ settings, update }: SectionProps) {
@@ -35,7 +36,12 @@ export function LearningSection({ settings, update }: SectionProps) {
           <Row label="学习模式" description="在译文末尾显示「解析」，点 YouTube 字幕也能暂停并解析这一句。">
             <Switch checked={settings.learningMode} onCheckedChange={(v) => update({ learningMode: v })} />
           </Row>
+          <Row label="生词高亮" description="生词本里的单词出现在任何网页上时自动标出（包括复数、过去式等变形），鼠标停在上面显示释义。">
+            <Switch checked={settings.vocabHighlight} onCheckedChange={(v) => update({ vocabHighlight: v })} />
+          </Row>
         </Group>
+
+        <Review notes={notes} />
 
         <section className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3 px-1">
