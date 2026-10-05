@@ -39,6 +39,7 @@ export function renderLoading(unit: Unit) {
   spinner.setAttribute('role', 'status');
   spinner.setAttribute('aria-label', '翻译中');
   spinner.title = '翻译中…';
+  spinner.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
   el.replaceChildren(spinner);
 }
 
@@ -57,6 +58,8 @@ export function renderTranslation(unit: Unit, translated: string, opts: RenderOp
   if (frag) el.replaceChildren(frag);
   else el.textContent = stripPlaceholders(translated); // 占位符被模型弄乱：退回纯文本，保证页面不坏
 
+  unit.learnEl?.remove();
+  unit.learnEl = undefined;
   if (opts.onAnalyze && unit.source.plain.length >= LEARN_MIN_CHARS && /\s/.test(unit.source.plain)) {
     const translation = el.textContent ?? '';
     const learn = document.createElement('tx-learn');
@@ -71,7 +74,9 @@ export function renderTranslation(unit: Unit, translated: string, opts: RenderOp
     };
     learn.addEventListener('click', open);
     learn.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && open(e));
-    el.append(learn);
+    // 紧跟在原文最后一个字后面（也就是翻译中小转圈的位置），译文保持干净
+    el.before(learn);
+    unit.learnEl = learn;
   }
 }
 
@@ -98,6 +103,8 @@ export function renderError(unit: Unit, message: string, onRetry: () => void) {
 }
 
 export function removeTranslation(unit: Unit) {
+  unit.learnEl?.remove();
+  unit.learnEl = undefined;
   unit.translationEl?.remove();
   unit.translationEl = undefined;
   if (unit.whole) unit.block.removeAttribute('data-tx-whole');
@@ -105,6 +112,6 @@ export function removeTranslation(unit: Unit) {
 
 /** 清理页面上所有插件插入的内容 */
 export function removeAllTranslations() {
-  document.querySelectorAll(TRANSLATION_TAG).forEach((e) => e.remove());
+  document.querySelectorAll(`${TRANSLATION_TAG}, tx-learn`).forEach((e) => e.remove());
   document.querySelectorAll('[data-tx-whole]').forEach((e) => e.removeAttribute('data-tx-whole'));
 }

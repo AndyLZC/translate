@@ -125,8 +125,12 @@ try {
 
   // ---------- 学习模式：整页翻译后点「解析」 ----------
   await page.mouse.click(1280 - 38, 860 - 116);
-  await page.locator('#p1 tx-translation tx-learn').waitFor({ timeout: 10000 });
-  check('译文后显示「解析」', await page.locator('#p1 tx-learn').isVisible());
+  await page.locator('#p1 tx-learn').waitFor({ timeout: 10000 });
+  const placement = await page.evaluate(() => {
+    const learn = document.querySelector('#p1 tx-learn');
+    return { next: learn.nextElementSibling?.tagName, prev: learn.previousSibling?.textContent?.trim().slice(-5), inTranslation: !!learn.closest('tx-translation') };
+  });
+  check('「解析」放在原文句末、译文之前', (await page.locator('#p1 tx-learn').isVisible()) && placement.next === 'TX-TRANSLATION' && placement.prev === 'soil.' && !placement.inTranslation, JSON.stringify(placement));
   await page.locator('#p1 tx-learn').click();
   await page.locator('tx-ui .panel .md li').first().waitFor({ timeout: 10000 });
   const orig = await page.locator('tx-ui .panel .sentence .orig').textContent();

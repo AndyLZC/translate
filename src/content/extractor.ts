@@ -21,6 +21,8 @@ export interface Unit {
   signature: string;
   state: UnitState;
   translationEl?: HTMLElement;
+  /** 学习模式的「解析」标签，放在原文末尾（译文之前） */
+  learnEl?: HTMLElement;
 }
 
 export interface ExtractorConfig {
