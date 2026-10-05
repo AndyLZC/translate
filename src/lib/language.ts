@@ -45,3 +45,16 @@ export function isTargetLanguage(text: string, target: string): boolean {
   if (text.length < 40) return false;
   return franc(text, { minLength: 20 }) === code;
 }
+
+/**
+ * 页面主体是不是外语（不是目标语言）：先看 <html lang>，再抽样正文判断。
+ * 用于「自动翻译外语网页」。
+ */
+export function isForeignPage(target: string, doc: Document = document): boolean {
+  const base = target.split('-')[0].toLowerCase();
+  const lang = doc.documentElement.lang.toLowerCase();
+  if (lang && lang.split('-')[0] === base) return false;
+  const sample = (doc.body?.innerText ?? '').slice(0, 5000);
+  if (sample.replace(/\s+/g, '').length < 80) return false;
+  return !isTargetLanguage(sample, target);
+}

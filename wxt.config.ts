@@ -26,7 +26,12 @@ export default defineConfig({
       },
     },
     ...(browser === 'firefox' && {
-      browser_specific_settings: { gecko: { id: 'ai-translate@andylzc', strict_min_version: '121.0' } },
+      // 128 起支持 MAIN world 内容脚本（YouTube 字幕拦截需要）；同时声明支持安卓版 Firefox。
+      // 网页文字会发给用户配置的 AI 服务，按 Firefox 要求如实声明 websiteContent
+      browser_specific_settings: {
+        gecko: { id: 'ai-translate@andylzc', strict_min_version: '128.0', data_collection_permissions: { required: ['websiteContent'] } },
+        gecko_android: { strict_min_version: '128.0' },
+      },
     }),
   }),
 });

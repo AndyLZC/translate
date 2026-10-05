@@ -16,6 +16,40 @@ export interface TranslateResponse {
   error?: string;
 }
 
+export interface TranslateTextRequest {
+  text: string;
+  /** selection：划词；input：输入框里自己写的文字 */
+  mode: 'selection' | 'input';
+  /** 目标语言，默认用设置里的目标语言 */
+  to?: string;
+}
+
+export interface TranslateTextResponse {
+  text?: string;
+  /** 是否按词典格式返回 */
+  dictionary?: boolean;
+  error?: string;
+}
+
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AnalyzeRequest {
+  text: string;
+}
+
+export interface FollowUpRequest {
+  /** 被解析的原文 */
+  text: string;
+  /** 已给出的解析 */
+  analysis: string;
+  /** 之前的追问和回答 */
+  history: ChatTurn[];
+  question: string;
+}
+
 export interface PageStatus {
   enabled: boolean;
   mode: DisplayMode;
@@ -29,6 +63,11 @@ export interface PageStatus {
 interface ProtocolMap {
   // content / options → background
   translate(req: TranslateRequest): TranslateResponse;
+  translateText(req: TranslateTextRequest): TranslateTextResponse;
+  /** 学习模式：句子解析 */
+  analyze(req: AnalyzeRequest): { text?: string; error?: string };
+  /** 学习模式：追问 */
+  followUp(req: FollowUpRequest): { text?: string; error?: string };
   /** 不传则测试当前使用的服务商；设置页传入正在编辑的配置 */
   testConnection(provider?: { type: ProviderType; config: ProviderConfig }): { ok: boolean; message: string };
   cacheStats(): { count: number };
@@ -39,6 +78,12 @@ interface ProtocolMap {
   toggleTranslation(): PageStatus;
   setTranslation(enabled: boolean): PageStatus;
   getStatus(): PageStatus;
+  /** 右键菜单：翻译选中的文字 */
+  translateSelection(): void;
+  /** 右键菜单：解析选中的句子 */
+  analyzeSelection(): void;
+  /** YouTube：导出双语字幕 */
+  exportSubtitles(): { filename?: string; srt?: string; error?: string };
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();

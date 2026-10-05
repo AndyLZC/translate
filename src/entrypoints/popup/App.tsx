@@ -1,31 +1,37 @@
 import { useEffect, useState } from 'react';
+import { CircleAlert, Download, GraduationCap, Languages, LoaderCircle, MousePointerClick, RotateCcw, Settings as SettingsIcon, Star } from 'lucide-react';
 import { browser } from 'wxt/browser';
-import { Button, Segmented, Select, Switch } from '@/components/ui';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { SegmentedControl } from '@/components/ui/toggle-group';
+import { dayKey, USAGE_KEY, type UsageData } from '@/background/usage';
 import { sendMessage, type PageStatus } from '@/lib/messaging';
 import { PROVIDERS, providerConfigError, providerPreset, type ProviderType } from '@/lib/providers';
-import { activeProviderConfig, TARGET_LANGUAGES, updateProvider, type DisplayMode } from '@/lib/settings';
+import { activeProviderConfig, updateProvider } from '@/lib/settings';
 import { hostMatches } from '@/lib/site-rules';
 import { useSettings } from '@/lib/use-settings';
-
-const MODES: { value: DisplayMode; label: string }[] = [
-  { value: 'bilingual', label: '双语对照' },
-  { value: 'translation', label: '只看译文' },
-  { value: 'original', label: '只看原文' },
-];
+import { cn } from '@/lib/utils';
+import { DISPLAY_MODES, LanguageSelect } from '../options/shared';
 
 export default function App() {
   const [settings, update] = useSettings();
   const [tabId, setTabId] = useState<number>();
-  const [host, setHost] = useState('');
+  const [url, setUrl] = useState<URL | null>(null);
   const [status, setStatus] = useState<PageStatus | null>(null);
   const [unsupported, setUnsupported] = useState(false);
+  const [todayRequests, setTodayRequests] = useState(0);
+  const [exportMsg, setExportMsg] = useState('');
 
   useEffect(() => {
     void (async () => {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       setTabId(tab?.id);
       try {
-        setHost(new URL(tab?.url ?? '').hostname);
+        const u = new URL(tab?.url ?? '');
+        if (/^https?:$/.test(u.protocol)) setUrl(u);
       } catch {
         /* 无地址的页面 */
       }
@@ -36,9 +42,13 @@ export default function App() {
         setUnsupported(true);
       }
     })();
+    void browser.storage.local.get(USAGE_KEY).then((r) => {
+      const day = (r[USAGE_KEY] as UsageData | undefined)?.[dayKey()] ?? {};
+      setTodayRequests(Object.values(day).reduce((n, e) => n + e.requests, 0));
+    });
   }, []);
 
-  // 翻译进行中时刷新进度
+  // 翻译进行中刷新进度
   useEffect(() => {
     if (tabId == null || !status?.enabled) return;
     const t = setInterval(async () => {
@@ -47,122 +57,186 @@ export default function App() {
       } catch {
         /* 页面已跳转 */
       }
-    }, 800);
+    }, 700);
     return () => clearInterval(t);
   }, [tabId, status?.enabled]);
 
-  if (!settings) return <div className="w-80 p-4" />;
+  if (!settings) return <div className="h-[480px] w-[360px]" />;
+
+  const host = url?.hostname ?? '';
+  const provider = activeProviderConfig(settings);
+  const preset = providerPreset(settings.activeProvider);
+  const setupError = providerConfigError(settings.activeProvider, provider);
+  const modelOptions = [...new Set([provider.model, ...preset.models.map((m) => m.id)].filter(Boolean))];
+  const isYouTube = /(^|\.)youtube\.com$/.test(host) && url?.pathname === '/watch';
+  const busy = !!status?.enabled && status.done + status.failed < status.total;
+  const pct = status?.total ? Math.round(((status.done + status.failed) / status.total) * 100) : 0;
+  const inList = (list: string[]) => !!host && list.some((p) => hostMatches(host, p));
+  const openOptions = (hash = '') => {
+    void browser.tabs.create({ url: browser.runtime.getURL(`/options.html${hash}`) });
+    window.close();
+  };
 
   const toggle = async () => {
     if (tabId == null) return;
     setStatus(await sendMessage('toggleTranslation', undefined, tabId));
   };
 
-  const inList = (list: string[]) => !!host && list.some((p) => hostMatches(host, p));
-  const setInList = (key: 'alwaysTranslateSites' | 'neverTranslateSites', on: boolean) => {
-    const list = settings[key].filter((p) => !hostMatches(host, p));
-    void update({ [key]: on ? [...list, host] : list });
+  const exportSrt = async () => {
+    if (tabId == null) return;
+    const res = await sendMessage('exportSubtitles', undefined, tabId).catch((e) => ({ error: String(e) }) as { error: string; srt?: string; filename?: string });
+    if (!res?.srt) return setExportMsg(res?.error ?? '导出失败');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([res.srt], { type: 'text/plain;charset=utf-8' }));
+    a.download = res.filename ?? 'subtitles.srt';
+    a.click();
+    setExportMsg('已导出');
   };
 
-  const provider = activeProviderConfig(settings);
-  const preset = providerPreset(settings.activeProvider);
-  const setupError = providerConfigError(settings.activeProvider, provider);
-  const modelOptions = [...new Set([provider.model, ...preset.models.map((m) => m.id)].filter(Boolean))];
-  const progress = status?.enabled && status.total ? `${status.done}/${status.total}` : '';
-
   return (
-    <div className="w-80 space-y-4 p-4 text-sm">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <img src="/icon/48.png" className="h-6 w-6" alt="" />
-          <span className="font-semibold">AI 双语翻译</span>
+    <div className="w-[360px] bg-background text-sm">
+      <header className="flex items-center gap-2.5 border-b px-4 py-3">
+        <img src="/icon/48.png" className="size-7 rounded-lg" alt="" />
+        <div className="min-w-0 flex-1">
+          <div className="leading-tight font-semibold">AI 双语翻译</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {preset.label} · {provider.model || '未设置模型'}
+          </div>
         </div>
-        <button className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg)]" onClick={() => browser.runtime.openOptionsPage()}>
-          设置
-        </button>
+        <Button variant="ghost" size="icon-sm" aria-label="设置" title="设置" onClick={() => openOptions()}>
+          <SettingsIcon />
+        </Button>
       </header>
 
-      {setupError && (
-        <div className="rounded-md bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          {setupError.replace('请先在设置页', '还没有')}，
-          <button className="underline" onClick={() => browser.runtime.openOptionsPage()}>
-            去设置
-          </button>
-        </div>
-      )}
+      <div className="space-y-4 p-4">
+        {setupError && (
+          <Alert variant="warning">
+            <CircleAlert />
+            <AlertDescription>
+              <p>
+                {setupError.replace('请先在设置页', '还没有')}。
+                <button className="font-medium underline underline-offset-2" onClick={() => openOptions('#models')}>
+                  去设置
+                </button>
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {unsupported ? (
-        <p className="rounded-md bg-[var(--bg-muted)] p-3 text-xs text-[var(--fg-muted)]">
-          这个页面无法翻译（浏览器内置页面或扩展商店），或者页面在安装插件前就已打开，刷新后再试。
-        </p>
-      ) : (
-        <Button className="w-full" onClick={toggle} variant={status?.enabled ? 'secondary' : 'primary'}>
-          {status?.enabled ? '显示原文' : '翻译此页面'}
-          {progress && <span className="text-xs opacity-70">{progress}</span>}
-        </Button>
-      )}
-      {!!status?.failed && (
-        <p className="text-xs text-red-600">
-          {status.failed} 段翻译失败{status.error ? `：${status.error}` : ''}。可点页面上的「⚠ 重试」或悬浮按钮旁的进度条重试。
-        </p>
-      )}
-
-      <div className="space-y-1.5">
-        <div className="text-xs text-[var(--fg-muted)]">显示方式</div>
-        <Segmented value={settings.displayMode} options={MODES} onChange={(v) => update({ displayMode: v })} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1.5">
-          <div className="text-xs text-[var(--fg-muted)]">服务商</div>
-          <Select value={settings.activeProvider} onChange={(e) => update({ activeProvider: e.target.value as ProviderType })}>
-            {PROVIDERS.map((p) => (
-              <option key={p.type} value={p.type}>
-                {p.label}
-                {providerConfigError(p.type, settings.providers[p.type]) ? '（未配置）' : ''}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <div className="text-xs text-[var(--fg-muted)]">模型</div>
-          <Select value={provider.model} onChange={(e) => updateProvider(settings.activeProvider, { model: e.target.value })}>
-            {modelOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <div className="text-xs text-[var(--fg-muted)]">翻译成</div>
-        <Select value={settings.targetLang} onChange={(e) => update({ targetLang: e.target.value })}>
-          {TARGET_LANGUAGES.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      {host && (
-        <div className="space-y-2.5 border-t border-[var(--border)] pt-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate">总是翻译 {host}</span>
-            <Switch checked={inList(settings.alwaysTranslateSites)} onChange={(v) => setInList('alwaysTranslateSites', v)} />
+        {unsupported ? (
+          <p className="rounded-lg bg-muted px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+            这个页面不能翻译（浏览器内置页面、扩展商店），或者页面在插件更新前就已打开，刷新后再试。
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <Button size="lg" className="w-full" variant={status?.enabled ? 'outline' : 'default'} onClick={toggle}>
+              {busy ? <LoaderCircle className="animate-spin" /> : status?.enabled ? <RotateCcw /> : <Languages />}
+              {status?.enabled ? '显示原文' : '翻译此页面'}
+              <kbd className="ml-1 rounded border border-current/25 px-1.5 font-mono text-[10px] opacity-70">Alt+A</kbd>
+            </Button>
+            {status?.enabled && status.total > 0 && (
+              <div className="space-y-1">
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className={cn('h-full rounded-full transition-all', status.failed ? 'bg-warning' : 'bg-primary')} style={{ width: `${pct}%` }} />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    已翻译 {status.done}/{status.total} 段
+                  </span>
+                  {!!status.failed && <span className="text-destructive">{status.failed} 段失败</span>}
+                </div>
+                {status.error && <p className="text-xs text-destructive">{status.error}</p>}
+              </div>
+            )}
           </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate">在此网站隐藏悬浮按钮</span>
-            <Switch checked={inList(settings.neverTranslateSites)} onChange={(v) => setInList('neverTranslateSites', v)} />
+        )}
+
+        <SegmentedControl size="sm" value={settings.displayMode} onValueChange={(v) => update({ displayMode: v })} options={DISPLAY_MODES} />
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <div className="text-xs text-muted-foreground">服务商</div>
+            <Select value={settings.activeProvider} onValueChange={(v) => update({ activeProvider: v as ProviderType })}>
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDERS.map((p) => (
+                  <SelectItem key={p.type} value={p.type}>
+                    {p.label}
+                    {providerConfigError(p.type, settings.providers[p.type]) ? <span className="text-muted-foreground">（未配置）</span> : null}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <div className="text-xs text-muted-foreground">模型</div>
+            <Select value={provider.model} onValueChange={(v) => updateProvider(settings.activeProvider, { model: v })}>
+              <SelectTrigger size="sm">
+                <SelectValue placeholder="未设置" />
+              </SelectTrigger>
+              <SelectContent>
+                {modelOptions.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-      )}
 
-      <footer className="text-xs text-[var(--fg-muted)]">
-        快捷键 <kbd className="rounded border border-[var(--border)] px-1">Alt</kbd>+<kbd className="rounded border border-[var(--border)] px-1">A</kbd> 翻译/还原
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">翻译成</span>
+          <LanguageSelect size="sm" className="w-40 sm:w-40" value={settings.targetLang} onChange={(v) => update({ targetLang: v })} />
+        </div>
+
+        <Separator />
+
+        <div className="space-y-3">
+          {host && (
+            <ToggleRow icon={<Star />} label={`总是翻译 ${host}`} checked={inList(settings.alwaysTranslateSites)} onChange={(on) => {
+              const list = settings.alwaysTranslateSites.filter((p) => !hostMatches(host, p));
+              void update({ alwaysTranslateSites: on ? [...list, host] : list });
+            }} />
+          )}
+          <ToggleRow icon={<MousePointerClick />} label="划词翻译" checked={settings.selectionMode !== 'off'} onChange={(on) => update({ selectionMode: on ? 'icon' : 'off' })} />
+          <ToggleRow icon={<GraduationCap />} label="学习模式（句子解析）" checked={settings.learningMode} onChange={(on) => update({ learningMode: on })} />
+        </div>
+
+        {isYouTube && (
+          <>
+            <Separator />
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="outline" size="sm" onClick={exportSrt}>
+                <Download />
+                导出双语字幕 SRT
+              </Button>
+              {exportMsg && <span className="text-xs text-muted-foreground">{exportMsg}</span>}
+            </div>
+          </>
+        )}
+      </div>
+
+      <footer className="flex items-center justify-between border-t px-4 py-2.5 text-xs text-muted-foreground">
+        <span>今日 {todayRequests} 次请求</span>
+        <button className="cursor-pointer hover:text-foreground" onClick={() => openOptions('#learning')}>
+          生词本 →
+        </button>
       </footer>
     </div>
+  );
+}
+
+function ToggleRow({ icon, label, checked, onChange }: { icon: React.ReactNode; label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3">
+      <span className="flex min-w-0 items-center gap-2 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
+        {icon}
+        <span className="truncate">{label}</span>
+      </span>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </label>
   );
 }

@@ -32,6 +32,19 @@ export interface Settings {
   youtubeEnabled: boolean;
   /** 把设置（含 API Key）备份到浏览器账号的同步存储，重装后自动恢复 */
   syncSettings: boolean;
+  /** 划词翻译：icon 先显示小图标，auto 选中即翻译，off 关闭 */
+  selectionMode: 'icon' | 'auto' | 'off';
+  /** 选中的文字已经是目标语言时，翻译成这个语言 */
+  secondaryLang: string;
+  /** 输入框里连按三下空格翻译 */
+  inputEnabled: boolean;
+  inputTargetLang: string;
+  /** 鼠标悬停段落时按下这个键翻译该段 */
+  hoverKey: 'off' | 'Control' | 'Alt' | 'Shift';
+  /** 自动翻译不是目标语言的网页 */
+  autoTranslateForeign: boolean;
+  /** 学习模式：译文后显示「解析」，可查看句子结构、词汇并追问 */
+  learningMode: boolean;
   /** 用户自定义站点规则（JSON），会覆盖同名内置规则 */
   customSiteRules: string;
 }
@@ -54,6 +67,13 @@ export const DEFAULT_SETTINGS: Settings = {
   showFloatingButton: true,
   youtubeEnabled: true,
   syncSettings: true,
+  selectionMode: 'icon',
+  secondaryLang: 'en',
+  inputEnabled: true,
+  inputTargetLang: 'en',
+  hoverKey: 'Control',
+  autoTranslateForeign: false,
+  learningMode: true,
   customSiteRules: '',
 };
 

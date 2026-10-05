@@ -35,6 +35,14 @@ const CSS = `
   .menu, .progress { background: #1f2937; color: #e5e7eb; }
   .menu button:hover { background: #374151; }
 }
+/* 触屏没有悬停：开启翻译时一直显示模式切换，按钮更大方便点 */
+@media (hover: none) {
+  .wrap { right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .menu.show { display: flex; }
+  .menu button { padding: 8px 11px; }
+  .btn { width: 46px; height: 46px; }
+  .close { display: block; }
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 `;
 
@@ -55,7 +63,9 @@ export class FloatingButton {
   constructor(private handlers: FloatingButtonHandlers) {
     this.host = document.createElement('tx-float');
     const shadow = this.host.attachShadow({ mode: 'closed' });
-    shadow.innerHTML = `<style>${CSS}</style>`;
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    shadow.appendChild(style);
     const wrap = document.createElement('div');
     wrap.className = 'wrap';
 

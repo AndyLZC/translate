@@ -9,6 +9,9 @@ const CSS = `
 .tr { color: #fff; font-size: var(--tx-fs, 20px); font-weight: 500; }
 .tr.pending { opacity: .55; font-size: calc(var(--tx-fs, 20px) * .7); }
 .tr.error { color: #ffb4a8; font-size: calc(var(--tx-fs, 20px) * .65); }
+.box.learn { cursor: pointer; }
+.box.learn:hover { background: rgba(8, 8, 8, .86); }
+.box.learn:hover .orig { text-decoration: underline dotted rgba(255,255,255,.6); text-underline-offset: 3px; }
 .line[hidden] { display: none; }
 `;
 
@@ -29,6 +32,8 @@ export class SubtitleOverlay {
   private resize = new ResizeObserver(([e]) => this.fit(e.contentRect.height));
   private player: HTMLElement | null = null;
   private last = '';
+  /** 学习模式：点字幕打开解析 */
+  onClick: (() => void) | null = null;
 
   constructor() {
     const shadow = this.host.attachShadow({ mode: 'open' });
@@ -39,6 +44,13 @@ export class SubtitleOverlay {
     this.tr.className = 'line tr';
     this.box.append(this.orig, this.tr);
     this.box.hidden = true;
+    this.box.addEventListener('click', (e) => {
+      if (!this.onClick) return;
+      e.stopPropagation(); // 不触发播放器的暂停/播放
+      this.onClick();
+    });
+    // 播放器在 mousedown 时就会处理，拦掉避免误触
+    this.box.addEventListener('mousedown', (e) => this.onClick && e.stopPropagation());
     shadow.append(style, this.box);
   }
 
@@ -68,6 +80,8 @@ export class SubtitleOverlay {
     this.orig.hidden = !c.showOriginal && c.state === 'done';
     this.tr.className = `line tr ${c.state === 'done' ? '' : c.state === 'loading' ? 'pending' : 'error'}`;
     this.tr.textContent = c.state === 'loading' ? '翻译中…' : c.state === 'error' ? `⚠ ${c.translation ?? '翻译失败'}` : c.translation ?? '';
+    this.box.classList.toggle('learn', !!this.onClick);
+    this.box.title = this.onClick ? '点击暂停并解析这句' : '';
     this.box.hidden = false;
   }
 

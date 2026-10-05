@@ -1,9 +1,11 @@
-import { sendMessage } from '@/lib/messaging';
+import { AnalysisPanel } from '@/content/analysis-panel';
+import { parseSvg } from '@/content/ui/host';
+import { onMessage, sendMessage } from '@/lib/messaging';
 import { updateSettings, type Settings } from '@/lib/settings';
 import { escapeText, stripPlaceholders } from '@/content/serializer';
 import { FROM_PAGE, TO_PAGE, type ExtMessage, type PageMessage, type WithoutSource } from './bridge';
 import { SubtitleOverlay } from './overlay';
-import { currentVideoId, findSentenceIndex, parseTimedText, segment, trackInfo, type Sentence } from './subtitles';
+import { currentVideoId, findSentenceIndex, parseTimedText, segment, toSrt, trackInfo, type Sentence } from './subtitles';
 
 const CHUNK = 40;
 const RETRY_AFTER_MS = 20_000;
@@ -39,12 +41,17 @@ export class YouTubeSubtitles {
   private timers: ReturnType<typeof setInterval>[] = [];
   private autoRequested = '';
   private boundVideo: HTMLVideoElement | null = null;
+  private panel = new AnalysisPanel();
+  private currentLine = -1;
+  private removeMessageListener: (() => void) | null = null;
 
   constructor(private settings: Settings) {
     this.enabled = settings.youtubeEnabled;
   }
 
   start() {
+    this.overlay.onClick = this.settings.learningMode ? this.analyzeCurrent : null;
+    this.removeMessageListener = onMessage('exportSubtitles', () => this.exportSrt());
     window.addEventListener('message', this.onMessage);
     document.addEventListener('yt-navigate-finish', this.onNavigate);
     this.lastHref = location.href;
@@ -70,6 +77,8 @@ export class YouTubeSubtitles {
     cancelAnimationFrame(this.raf);
     this.bindVideo(null);
     this.overlay.detach();
+    this.panel.close();
+    this.removeMessageListener?.();
     this.button?.remove();
     this.player()?.removeAttribute('data-tx-subs');
   }
@@ -77,6 +86,7 @@ export class YouTubeSubtitles {
   updateSettings(s: Settings) {
     const old = this.settings;
     this.settings = s;
+    this.overlay.onClick = s.learningMode ? this.analyzeCurrent : null;
     if (s.youtubeEnabled !== this.enabled) this.setEnabled(s.youtubeEnabled, false);
     const retranslate =
       old.targetLang !== s.targetLang ||
@@ -276,6 +286,7 @@ export class YouTubeSubtitles {
 
     const t = this.currentTimeMs();
     const idx = findSentenceIndex(this.lines, t);
+    this.currentLine = idx;
     if (idx < 0) return this.overlay.hide();
     const line = this.lines[idx];
     const chunk = this.chunks[Math.floor(idx / CHUNK)];
@@ -293,6 +304,24 @@ export class YouTubeSubtitles {
     });
   }
 
+  /** 学习模式：点字幕 → 暂停视频并打开这句的解析 */
+  private analyzeCurrent = () => {
+    const line = this.lines[this.currentLine];
+    if (!line) return;
+    this.video()?.pause();
+    void this.panel.open({ text: line.text, translation: line.translation });
+  };
+
+  private exportSrt(): { filename?: string; srt?: string; error?: string } {
+    if (!this.lines.length) return { error: '当前视频还没有加载字幕，请先播放并打开字幕' };
+    const done = this.lines.filter((l) => l.translation).length;
+    const title = document.title.replace(/ - YouTube$/, '').replace(/[\\/:*?"<>|]+/g, ' ').trim() || this.videoId;
+    return {
+      filename: `${title}（双语${done < this.lines.length ? `，已翻译 ${done}/${this.lines.length}` : ''}）.srt`,
+      srt: toSrt(this.lines),
+    };
+  }
+
   // ---------- 播放器上的开关按钮 ----------
 
   private ensureButton() {
@@ -306,8 +335,11 @@ export class YouTubeSubtitles {
   private createButton() {
     const btn = document.createElement('button');
     btn.className = 'ytp-button tx-yt-btn';
-    btn.innerHTML =
-      '<svg viewBox="0 0 36 36" width="100%" height="100%"><text x="18" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#fff" font-family="PingFang SC, Microsoft YaHei, sans-serif">译</text></svg>';
+    btn.append(
+      parseSvg(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="100%" height="100%"><text x="18" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#fff" font-family="PingFang SC, Microsoft YaHei, sans-serif">译</text></svg>',
+      ),
+    );
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.setEnabled(!this.enabled, true);

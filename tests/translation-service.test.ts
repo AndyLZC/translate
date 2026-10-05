@@ -17,7 +17,7 @@ function memoryCache() {
 /** 假模型：把每段原文变成 "译:原文"，可以故意漏掉某些段 */
 function fakeModel(drop: (text: string) => boolean = () => false) {
   return vi.fn<CompleteFn>(async ({ prompt }) =>
-    [...prompt.matchAll(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g)]
+    [...(prompt ?? "").matchAll(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g)]
       .filter((m) => !drop(m[2]))
       .map((m) => `<seg id="${m[1]}">译:${m[2]}</seg>`)
       .join('\n'),
@@ -111,5 +111,64 @@ describe('chunkTexts', () => {
   it('按段数和字符数切分，超长单段独占一批', () => {
     const items = ['aaaa', 'bb', 'cccccccccc', 'd'].map((text) => ({ text }));
     expect(chunkTexts(items, 3, 8).map((c) => c.map((i) => i.text))).toEqual([['aaaa', 'bb'], ['cccccccccc'], ['d']]);
+  });
+});
+
+describe('translateText', () => {
+  it('划词：普通句子直接翻译，单词走词典格式，结果缓存', async () => {
+    const complete = vi.fn<CompleteFn>(async ({ system, prompt }) => ({
+      text: system.includes('dictionary') ? `${prompt} /ˈæp.əl/\nn. 苹果` : `译:${prompt}`,
+      usage: { inputTokens: 10, outputTokens: 5 },
+    }));
+    const usage: unknown[] = [];
+    const svc = new TranslationService({ getSettings: async () => settings, complete, cache: memoryCache(), onUsage: (u) => usage.push(u) });
+    expect(await svc.translateText({ text: ' Hello world ', mode: 'selection' })).toEqual({ text: '译:Hello world', dictionary: false });
+    expect(await svc.translateText({ text: 'apple', mode: 'selection' })).toEqual({ text: 'apple /ˈæp.əl/\nn. 苹果', dictionary: true });
+    await svc.translateText({ text: 'apple', mode: 'selection' });
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(usage).toEqual([
+      { model: 'openai/gpt-4o-mini', chars: 11, usage: { inputTokens: 10, outputTokens: 5 } },
+      { model: 'openai/gpt-4o-mini', chars: 5, usage: { inputTokens: 10, outputTokens: 5 } },
+    ]);
+  });
+
+  it('输入框翻译：按指定语言，提示词说明是自己写的消息', async () => {
+    const complete = vi.fn<CompleteFn>(async () => 'Hi there');
+    const svc = new TranslationService({ getSettings: async () => settings, complete, cache: memoryCache() });
+    expect(await svc.translateText({ text: '你好', mode: 'input', to: 'en' })).toEqual({ text: 'Hi there', dictionary: false });
+    const { system } = complete.mock.calls[0][0];
+    expect(system).toContain('into English');
+    expect(system).toContain('chat box');
+  });
+
+  it('出错时返回错误信息', async () => {
+    const complete = vi.fn<CompleteFn>(async () => {
+      throw Object.assign(new Error('x'), { statusCode: 429 });
+    });
+    const svc = new TranslationService({ getSettings: async () => settings, complete, cache: memoryCache() });
+    expect(await svc.translateText({ text: 'hi there', mode: 'selection' })).toEqual({ error: '请求太频繁或额度用完（429）' });
+  });
+});
+
+describe('学习模式', () => {
+  it('解析结果缓存；追问带上原文、解析和历史', async () => {
+    const complete = vi.fn<CompleteFn>(async ({ messages, prompt }) => (messages ? `答:${messages.at(-1)!.content}` : `【译文】${prompt}`));
+    const svc = new TranslationService({ getSettings: async () => settings, complete, cache: memoryCache() });
+    expect(await svc.analyze({ text: 'Soil matters.' })).toEqual({ text: '【译文】Soil matters.' });
+    await svc.analyze({ text: 'Soil matters.' });
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete.mock.calls[0][0].system).toContain('【句子结构】');
+
+    const res = await svc.followUp({
+      text: 'Soil matters.',
+      analysis: '【译文】土壤很重要。',
+      history: [
+        { role: 'user', content: 'Q1' },
+        { role: 'assistant', content: 'A1' },
+      ],
+      question: 'matters 是什么词性？',
+    });
+    expect(res).toEqual({ text: '答:matters 是什么词性？' });
+    expect(complete.mock.calls[1][0].messages!.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user']);
   });
 });

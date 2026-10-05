@@ -5,9 +5,20 @@ import { completeOpenAICompatible } from './openai-compatible';
 
 const REQUEST_TIMEOUT = 90_000;
 
+export interface CompletionResult {
+  text: string;
+  usage?: { inputTokens: number; outputTokens: number };
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface CompletionRequest {
   system: string;
-  prompt: string;
+  /** 对话消息；单轮请求就是一条 user 消息 */
+  messages: ChatMessage[];
   config: ProviderConfig;
   baseURL: string;
   /** 是否是服务商的官方地址（代理地址可能不支持 beta 功能） */
@@ -19,16 +30,18 @@ export interface CompletionRequest {
 /** 用当前选中的服务商（或指定的服务商）完成一次请求 */
 export async function complete(args: {
   system: string;
-  prompt: string;
+  /** 单轮请求的用户消息；多轮对话用 messages */
+  prompt?: string;
+  messages?: ChatMessage[];
   settings: Settings;
   provider?: { type: ProviderType; config: ProviderConfig };
-}): Promise<string> {
+}): Promise<CompletionResult> {
   const type = args.provider?.type ?? args.settings.activeProvider;
   const config = args.provider?.config ?? activeProviderConfig(args.settings);
   const baseURL = resolveBaseURL(type, config);
   const req: CompletionRequest = {
     system: args.system,
-    prompt: args.prompt,
+    messages: args.messages ?? [{ role: 'user', content: args.prompt ?? '' }],
     config,
     baseURL,
     useOfficialEndpoint: baseURL === providerPreset(type).defaultBaseURL,

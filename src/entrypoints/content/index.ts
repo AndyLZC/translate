@@ -1,8 +1,13 @@
+import { isForeignPage } from '@/lib/language';
 import { onMessage } from '@/lib/messaging';
 import { getSettings, updateSettings, watchSettings } from '@/lib/settings';
 import { hostMatches } from '@/lib/site-rules';
+import { AnalysisPanel } from '@/content/analysis-panel';
 import { PageTranslator } from '@/content/controller';
 import { FloatingButton } from '@/content/floating-button';
+import { HoverTranslator } from '@/content/hover-translate';
+import { InputTranslator } from '@/content/input-translate';
+import { SelectionTranslator } from '@/content/selection';
 import './style.css';
 
 export default defineContentScript({
@@ -13,7 +18,15 @@ export default defineContentScript({
 
     let settings = await getSettings();
     const host = location.hostname;
-    const translator = new PageTranslator(settings);
+    const panel = new AnalysisPanel();
+    const renderOptions = { onAnalyze: (text: string, translation: string) => void panel.open({ text, translation }) };
+    const translator = new PageTranslator(settings, renderOptions);
+    const selection = new SelectionTranslator(settings, panel);
+    const input = new InputTranslator(settings);
+    const hover = new HoverTranslator(settings, () => translator.isEnabled, renderOptions);
+    selection.start();
+    input.start();
+    hover.start();
 
     const button = new FloatingButton({
       onToggle: () => translator.toggle(),
@@ -25,9 +38,9 @@ export default defineContentScript({
     });
     translator.onStatus((s) => button.update(s));
 
+    const inList = (list: string[]) => list.some((p) => hostMatches(host, p));
     const syncButton = () => {
-      const never = settings.neverTranslateSites.some((p) => hostMatches(host, p));
-      if (settings.showFloatingButton && !never) button.mount();
+      if (settings.showFloatingButton && !inList(settings.neverTranslateSites)) button.mount();
       else button.unmount();
     };
     syncButton();
@@ -35,6 +48,9 @@ export default defineContentScript({
     const unwatch = watchSettings((s) => {
       settings = s;
       translator.updateSettings(s);
+      selection.updateSettings(s);
+      input.updateSettings(s);
+      hover.updateSettings(s);
       syncButton();
     });
 
@@ -48,14 +64,30 @@ export default defineContentScript({
       return translator.status();
     });
     onMessage('getStatus', () => translator.status());
+    onMessage('translateSelection', () => selection.translateCurrentSelection());
+    onMessage('analyzeSelection', () => {
+      const text = window.getSelection()?.toString().trim();
+      if (text) void panel.open({ text });
+    });
 
     ctx.addEventListener(window, 'wxt:locationchange', () => translator.rescan());
     ctx.onInvalidated(() => {
       unwatch();
       translator.stop();
+      selection.stop();
+      input.stop();
+      hover.stop();
+      panel.close();
       button.unmount();
     });
 
-    if (settings.alwaysTranslateSites.some((p) => hostMatches(host, p))) translator.start();
+    if (inList(settings.alwaysTranslateSites)) {
+      translator.start();
+    } else if (settings.autoTranslateForeign && !inList(settings.neverTranslateSites)) {
+      // 等单页应用把正文渲染出来再判断语言
+      setTimeout(() => {
+        if (!translator.isEnabled && isForeignPage(settings.targetLang)) translator.start();
+      }, 1200);
+    }
   },
 });

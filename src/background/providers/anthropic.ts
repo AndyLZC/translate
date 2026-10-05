@@ -13,7 +13,7 @@ const isHaiku = (model: string) => model.startsWith('claude-haiku');
 export class ClaudeRefusalError extends Error {}
 
 /** Claude 走 Anthropic 官方 SDK */
-export async function completeAnthropic({ system, prompt, config, baseURL, temperature, signal, useOfficialEndpoint }: CompletionRequest) {
+export async function completeAnthropic({ system, messages, config, baseURL, temperature, signal, useOfficialEndpoint }: CompletionRequest) {
   const client = new Anthropic({
     apiKey: config.apiKey,
     baseURL,
@@ -26,7 +26,7 @@ export async function completeAnthropic({ system, prompt, config, baseURL, tempe
     model: config.model,
     max_tokens: MAX_TOKENS,
     system,
-    messages: [{ role: 'user' as const, content: prompt }],
+    messages,
     // 翻译是简单任务：Haiku 用低温度保持稳定；新模型用 low effort 省时省钱
     ...(isHaiku(config.model) ? { temperature } : { output_config: { effort: 'low' as const } }),
   };
@@ -43,5 +43,8 @@ export async function completeAnthropic({ system, prompt, config, baseURL, tempe
     throw new ClaudeRefusalError('Claude 拒绝翻译这部分内容，可换一个模型再试');
   }
   // max_tokens 截断时仍返回已有部分：缺失的段落会被逐段补翻
-  return response.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+  return {
+    text: response.content.map((b) => (b.type === 'text' ? b.text : '')).join(''),
+    usage: { inputTokens: response.usage.input_tokens ?? 0, outputTokens: response.usage.output_tokens ?? 0 },
+  };
 }

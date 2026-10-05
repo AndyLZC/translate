@@ -1,7 +1,25 @@
 import PQueue from 'p-queue';
-import type { TranslateRequest, TranslateResponse } from '@/lib/messaging';
+import type {
+  AnalyzeRequest,
+  ChatTurn,
+  FollowUpRequest,
+  TranslateRequest,
+  TranslateResponse,
+  TranslateTextRequest,
+  TranslateTextResponse,
+} from '@/lib/messaging';
 import type { Settings } from '@/lib/settings';
-import { buildSystemPrompt, buildUserPrompt, parseSegments, PROMPT_VERSION } from './prompt';
+import {
+  buildAnalysisPrompt,
+  buildDictionaryPrompt,
+  buildFollowUpPrompt,
+  buildSystemPrompt,
+  buildTextPrompt,
+  buildUserPrompt,
+  isSingleWord,
+  parseSegments,
+  PROMPT_VERSION,
+} from './prompt';
 
 export interface CacheLike {
   getMany(keys: string[]): Promise<(string | undefined)[]>;
@@ -9,13 +27,25 @@ export interface CacheLike {
   hashKey(parts: (string | number)[]): Promise<string>;
 }
 
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 /** 真正调用模型的函数，测试时可替换 */
-export type CompleteFn = (args: { system: string; prompt: string; settings: Settings }) => Promise<string>;
+export type CompleteFn = (args: {
+  system: string;
+  prompt?: string;
+  messages?: ChatTurn[];
+  settings: Settings;
+}) => Promise<string | { text: string; usage?: Usage }>;
 
 export interface ServiceDeps {
   getSettings(): Promise<Settings>;
   complete: CompleteFn;
   cache: CacheLike;
+  /** 每次真正请求模型后回调，用于用量统计 */
+  onUsage?(info: { model: string; chars: number; usage?: Usage }): void;
 }
 
 /**
@@ -40,6 +70,102 @@ export class TranslationService {
       });
     }
     return this.queue;
+  }
+
+  /** 调模型并记录用量 */
+  private async call(system: string, input: string | ChatTurn[], settings: Settings): Promise<string> {
+    const res = await this.deps.complete(
+      typeof input === 'string' ? { system, prompt: input, settings } : { system, messages: input, settings },
+    );
+    const out = typeof res === 'string' ? { text: res } : res;
+    const p = settings.providers[settings.activeProvider];
+    const chars = typeof input === 'string' ? input.length : input.reduce((n, m) => n + m.content.length, 0);
+    this.deps.onUsage?.({ model: `${settings.activeProvider}/${p.model}`, chars, usage: out.usage });
+    return out.text;
+  }
+
+  /** 学习模式：句子解析（结果缓存） */
+  async analyze(req: AnalyzeRequest, configError?: (s: Settings) => string | null): Promise<{ text?: string; error?: string }> {
+    const settings = await this.deps.getSettings();
+    const err = configError?.(settings);
+    if (err) return { error: err };
+    const text = req.text.trim();
+    const system = buildAnalysisPrompt(settings.targetLang);
+    const provider = settings.providers[settings.activeProvider];
+    const key = await this.deps.cache.hashKey([
+      PROMPT_VERSION,
+      'analyze',
+      settings.activeProvider,
+      provider.baseURL,
+      provider.model,
+      await this.deps.cache.hashKey([system]),
+      text,
+    ]);
+    const [cached] = await this.deps.cache.getMany([key]);
+    if (cached != null) return { text: cached };
+    try {
+      const out = (await this.getQueue(settings).add(() => this.call(system, text, settings)))!.trim();
+      if (out) await this.deps.cache.putMany([{ key, text: out }]);
+      return { text: out };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  /** 学习模式：追问（多轮，不缓存） */
+  async followUp(req: FollowUpRequest, configError?: (s: Settings) => string | null): Promise<{ text?: string; error?: string }> {
+    const settings = await this.deps.getSettings();
+    const err = configError?.(settings);
+    if (err) return { error: err };
+    const messages: ChatTurn[] = [
+      { role: 'user', content: req.text },
+      { role: 'assistant', content: req.analysis },
+      ...req.history.slice(-10),
+      { role: 'user', content: req.question },
+    ];
+    try {
+      const out = await this.getQueue(settings).add(() => this.call(buildFollowUpPrompt(settings.targetLang), messages, settings));
+      return { text: out!.trim() };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  /** 单段文字：划词、查词、输入框翻译 */
+  async translateText(
+    req: TranslateTextRequest,
+    configError?: (s: Settings) => string | null,
+  ): Promise<TranslateTextResponse> {
+    const settings = await this.deps.getSettings();
+    const err = configError?.(settings);
+    if (err) return { error: err };
+    const text = req.text.trim();
+    if (!text) return { text: '' };
+
+    const to = req.to || settings.targetLang;
+    const dictionary = req.mode === 'selection' && isSingleWord(text);
+    const system = dictionary ? buildDictionaryPrompt(to) : buildTextPrompt(settings, to, req.mode);
+    const provider = settings.providers[settings.activeProvider];
+    const key = await this.deps.cache.hashKey([
+      PROMPT_VERSION,
+      'text',
+      settings.activeProvider,
+      provider.baseURL,
+      provider.model,
+      to,
+      await this.deps.cache.hashKey([system]),
+      text,
+    ]);
+    const [cached] = await this.deps.cache.getMany([key]);
+    if (cached != null) return { text: cached, dictionary };
+
+    try {
+      const out = (await this.getQueue(settings).add(() => this.call(system, text, settings)))!.trim();
+      if (out) await this.deps.cache.putMany([{ key, text: out }]);
+      return { text: out, dictionary };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
   }
 
   async translate(req: TranslateRequest, configError?: (s: Settings) => string | null): Promise<TranslateResponse> {
@@ -116,15 +242,15 @@ export class TranslationService {
     /** 返回 false 表示请求本身失败（网络、鉴权、限流），这种情况不再逐段重试，避免放大故障 */
     const runChunk = async (chunk: { key: string; text: string }[]): Promise<boolean> => {
       try {
-        const output = await this.deps.complete({
+        const output = await this.call(
           system,
-          prompt: buildUserPrompt(
+          buildUserPrompt(
             chunk.map((c) => c.text),
             context,
             kind,
           ),
-          settings: s,
-        });
+          s,
+        );
         const parsed = parseSegments(output, chunk.length);
         chunk.forEach((c, i) => {
           const t = parsed.get(i + 1);

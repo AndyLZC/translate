@@ -3,6 +3,7 @@ import * as cache from '@/background/cache';
 import { languageName } from '@/background/prompt';
 import { complete } from '@/background/providers';
 import { errorMessage, TranslationService } from '@/background/translation-service';
+import { UsageRecorder } from '@/background/usage';
 import { onMessage, sendMessage } from '@/lib/messaging';
 import { providerConfigError } from '@/lib/providers';
 import { clearBackup, readBackup, writeBackup } from '@/lib/backup';
@@ -75,9 +76,19 @@ export default defineBackground(() => {
   const restored = restoreFromBackup();
   startBackupSync();
 
-  const service = new TranslationService({ getSettings, complete, cache });
+  const usage = new UsageRecorder();
+  const service = new TranslationService({
+    getSettings,
+    complete,
+    cache,
+    onUsage: ({ model, chars, usage: u }) =>
+      usage.record(model, { requests: 1, chars, inputTokens: u?.inputTokens ?? 0, outputTokens: u?.outputTokens ?? 0 }),
+  });
 
   onMessage('translate', ({ data }) => service.translate(data, configError));
+  onMessage('translateText', ({ data }) => service.translateText(data, configError));
+  onMessage('analyze', ({ data }) => service.analyze(data, configError));
+  onMessage('followUp', ({ data }) => service.followUp(data, configError));
 
   onMessage('testConnection', async ({ data }) => {
     const settings = await getSettings();
@@ -86,7 +97,7 @@ export default defineBackground(() => {
     if (err) return { ok: false, message: err };
     try {
       const started = Date.now();
-      const text = await complete({
+      const { text } = await complete({
         system: `Translate the user's text into ${languageName(settings.targetLang)}. Output only the translation.`,
         prompt: 'Hello, world! The connection works.',
         settings,
@@ -121,14 +132,24 @@ export default defineBackground(() => {
     }
   };
 
-  browser.commands.onCommand.addListener(async (command, tab) => {
+  // 手机版 Firefox 没有快捷键和右键菜单 API，要先判断
+  browser.commands?.onCommand.addListener(async (command, tab) => {
     if (command !== 'toggle-translation') return;
     const id = tab?.id ?? (await browser.tabs.query({ active: true, currentWindow: true }))[0]?.id;
     await toggleTab(id);
   });
 
+  const createMenus = () => {
+    if (!browser.contextMenus) return;
+    browser.contextMenus.removeAll(() => {
+      browser.contextMenus.create({ id: 'toggle-translation', title: '翻译 / 还原此页面', contexts: ['page'] });
+      browser.contextMenus.create({ id: 'translate-selection', title: '翻译「%s」', contexts: ['selection'] });
+      browser.contextMenus.create({ id: 'analyze-selection', title: '解析这句话（学习模式）', contexts: ['selection'] });
+    });
+  };
+
   browser.runtime.onInstalled.addListener(({ reason }) => {
-    browser.contextMenus.create({ id: 'toggle-translation', title: '翻译 / 还原此页面', contexts: ['page'] });
+    createMenus();
     // 首次安装打开设置页；如果从同步存储恢复了配置就不打扰
     if (reason === 'install') {
       void restored.then((ok) => {
@@ -137,7 +158,10 @@ export default defineBackground(() => {
     }
     if (reason === 'install' || reason === 'update') void injectIntoOpenTabs();
   });
-  browser.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === 'toggle-translation') void toggleTab(tab?.id);
+  browser.contextMenus?.onClicked.addListener((info, tab) => {
+    if (tab?.id == null) return;
+    if (info.menuItemId === 'toggle-translation') void toggleTab(tab.id);
+    if (info.menuItemId === 'translate-selection') void sendMessage('translateSelection', undefined, tab.id).catch(() => {});
+    if (info.menuItemId === 'analyze-selection') void sendMessage('analyzeSelection', undefined, tab.id).catch(() => {});
   });
 });

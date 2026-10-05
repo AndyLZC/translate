@@ -38,12 +38,37 @@ export function renderLoading(unit: Unit) {
   el.replaceChildren(document.createElement('tx-loading'));
 }
 
-export function renderTranslation(unit: Unit, translated: string) {
+export interface RenderOptions {
+  /** 学习模式：点译文后的「解析」 */
+  onAnalyze?: (original: string, translation: string) => void;
+}
+
+/** 太短的（菜单、按钮、标题碎片）不显示「解析」 */
+const LEARN_MIN_CHARS = 20;
+
+export function renderTranslation(unit: Unit, translated: string, opts: RenderOptions = {}) {
   const el = ensureTranslationEl(unit);
   el.dataset.txState = 'done';
   const frag = deserialize(translated, unit.source.placeholders);
   if (frag) el.replaceChildren(frag);
   else el.textContent = stripPlaceholders(translated); // 占位符被模型弄乱：退回纯文本，保证页面不坏
+
+  if (opts.onAnalyze && unit.source.plain.length >= LEARN_MIN_CHARS && /\s/.test(unit.source.plain)) {
+    const translation = el.textContent ?? '';
+    const learn = document.createElement('tx-learn');
+    learn.textContent = '解析';
+    learn.title = '句子结构、重点词汇、语法解析';
+    learn.setAttribute('role', 'button');
+    learn.tabIndex = 0;
+    const open = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onAnalyze!(unit.source.plain, translation);
+    };
+    learn.addEventListener('click', open);
+    learn.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && open(e));
+    el.append(learn);
+  }
 }
 
 export function renderError(unit: Unit, message: string, onRetry: () => void) {

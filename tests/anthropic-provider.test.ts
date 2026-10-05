@@ -29,7 +29,7 @@ function stubClaude(response: Record<string, unknown>) {
 
 const req = (model: string, official = true): CompletionRequest => ({
   system: 'sys',
-  prompt: '<seg id="1">Hello</seg>',
+  messages: [{ role: 'user', content: '<seg id="1">Hello</seg>' }],
   config: { apiKey: 'sk-ant-x', baseURL: '', model },
   baseURL: 'https://api.anthropic.com',
   useOfficialEndpoint: official,
@@ -42,7 +42,7 @@ describe('Claude provider', () => {
 
   it('Haiku：普通接口 + temperature，不带 effort', async () => {
     const calls = stubClaude({});
-    expect(await completeAnthropic(req('claude-haiku-4-5'))).toBe('<seg id="1">你好</seg>');
+    expect(await completeAnthropic(req('claude-haiku-4-5'))).toEqual({ text: '<seg id="1">你好</seg>', usage: { inputTokens: 1, outputTokens: 1 } });
     const { url, headers, body } = calls[0];
     expect(url).toBe('https://api.anthropic.com/v1/messages');
     expect(headers.get('x-api-key')).toBe('sk-ant-x');

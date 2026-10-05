@@ -94,3 +94,14 @@ describe('trackInfo / currentVideoId', () => {
     expect(currentVideoId({ href: 'https://www.youtube.com/' } as Location)).toBe('');
   });
 });
+
+describe('toSrt', async () => {
+  const { toSrt } = await import('@/youtube/subtitles');
+  it('双语 SRT 格式', () => {
+    const srt = toSrt([
+      { start: 0, end: 2500, text: 'Hello.', translation: '你好。' },
+      { start: 3_723_004, end: 3_725_000, text: 'Bye.' },
+    ]);
+    expect(srt).toBe('1\n00:00:00,000 --> 00:00:02,500\nHello.\n你好。\n\n2\n01:02:03,004 --> 01:02:05,000\nBye.\n');
+  });
+});

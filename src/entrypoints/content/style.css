@@ -71,3 +71,33 @@ html[data-tx-theme='highlight'] tx-translation[data-tx-state='done'] {
 html[data-tx-theme='italic'] tx-translation[data-tx-state='done'] {
   font-style: italic;
 }
+
+/* ---------- 学习模式：「解析」入口 ---------- */
+tx-learn {
+  display: none;
+  margin-left: 0.4em;
+  padding: 0 0.35em;
+  border-radius: 4px;
+  font-size: 0.78em;
+  font-weight: 600;
+  font-style: normal;
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.09);
+  cursor: pointer;
+  vertical-align: 0.08em;
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+}
+tx-learn:hover {
+  background: rgba(79, 70, 229, 0.18);
+}
+html[data-tx-learn] tx-learn {
+  display: inline;
+}
+@media (prefers-color-scheme: dark) {
+  tx-learn {
+    color: #a5a1ff;
+    background: rgba(165, 161, 255, 0.14);
+  }
+}

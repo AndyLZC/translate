@@ -79,3 +79,75 @@ export function parseSegments(output: string, count: number): Map<number, string
   }
   return result;
 }
+
+/** 划词翻译、输入框翻译：单段文字，直接输出译文 */
+export function buildTextPrompt(
+  s: Pick<Settings, 'customPrompt' | 'glossary'>,
+  targetLang: string,
+  mode: 'selection' | 'input',
+): string {
+  const lang = languageName(targetLang);
+  const parts = [
+    `You are a professional translator. Translate the user's text into ${lang}.`,
+    'Keep the original meaning, tone, formatting and line breaks. Keep URLs, code, @mentions, numbers and emoji unchanged.',
+    'Output only the translation: no explanations, notes, quotes or labels.',
+  ];
+  if (mode === 'input') {
+    parts.push(
+      `The user typed this text into a chat box, comment field or email. Write natural, idiomatic ${lang} that a native speaker would send, at the same level of formality.`,
+    );
+  }
+  const glossary = parseGlossary(s.glossary);
+  if (glossary.length) {
+    parts.push('', 'Glossary (always use these translations):');
+    for (const [src, dst] of glossary) parts.push(`- ${src} → ${dst}`);
+  }
+  if (s.customPrompt.trim() && mode === 'selection') parts.push('', 'Additional instructions:', s.customPrompt.trim());
+  return parts.join('\n');
+}
+
+/** 划词选中单个词时，按词典格式解释 */
+export function buildDictionaryPrompt(targetLang: string): string {
+  const lang = languageName(targetLang);
+  return [
+    `You are a concise bilingual dictionary. Explain the word or short phrase the user gives, writing explanations in ${lang}.`,
+    'Reply in plain text (no markdown), at most 7 lines:',
+    'Line 1: the word, then its pronunciation (IPA for English words, pinyin for Chinese).',
+    'Next lines: one line per part of speech, formatted as "pos. meaning; meaning" (at most 4 lines).',
+    `Last line: "例：" followed by one short example sentence in the original language and its ${lang} translation.`,
+  ].join('\n');
+}
+
+/** 是否按「查词」处理：不含空格的单个词，或很短的中日韩词语 */
+export function isSingleWord(text: string): boolean {
+  const t = text.trim();
+  if (!t || /\s/.test(t)) return false;
+  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(t)) return t.length <= 6 && /^[\p{L}]+$/u.test(t);
+  return t.length <= 32 && /^\p{L}[\p{L}'’-]*$/u.test(t);
+}
+
+/** 学习模式：长难句解析。固定的分节格式，方便插件渲染 */
+export function buildAnalysisPrompt(targetLang: string): string {
+  const lang = languageName(targetLang);
+  return [
+    `You are an experienced language teacher. The user is a ${lang} speaker learning the language of the passage they send. Explain it in ${lang}.`,
+    'If the passage has several sentences, translate all of it but focus the structure analysis on the one or two hardest sentences.',
+    'Reply using exactly these sections, each starting with its heading on its own line, and nothing else:',
+    '【译文】a natural, faithful translation.',
+    '【句子结构】the main clause first ("**主语**：…", "**谓语**：…", "**宾语/表语**：…"), then each clause or long modifier as a "- " list item saying what it is and what it modifies.',
+    '【重点词汇】3-6 of the harder words as "- word /IPA/ pos. meaning（in context）".',
+    '【短语搭配】useful phrases or collocations as "- phrase：meaning". Omit this section if there are none.',
+    '【语法要点】1-3 short "- " items on the grammar worth learning here.',
+    'Use **bold** only for labels. No other markdown, no greetings, no closing remarks.',
+  ].join('\n');
+}
+
+/** 追问：基于解析继续回答 */
+export function buildFollowUpPrompt(targetLang: string): string {
+  const lang = languageName(targetLang);
+  return [
+    `You are an experienced language teacher helping a ${lang} speaker understand a passage. You already gave the analysis in the conversation.`,
+    `Answer the learner's follow-up questions in ${lang}, concisely and concretely, quoting the original words when helpful.`,
+    'Plain text; "- " lists and **bold** are allowed, no other markdown.',
+  ].join('\n');
+}

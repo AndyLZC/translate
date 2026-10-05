@@ -1,45 +1,54 @@
 # AI 双语翻译
 
-用大模型把网页翻译成双语对照的浏览器扩展（Chrome / Edge / Firefox）。
+用大模型把网页、YouTube 字幕翻译成双语对照，并能边读边学（句子解析、查词、生词本）的浏览器扩展。支持 Chrome / Edge / Firefox（含安卓版 Firefox）。
 
-- **双语对照**：译文显示在每段原文下方，也可切换成"只看译文"或"只看原文"
-- **保留格式**：链接、加粗、斜体、行内代码、换行在译文里原样保留，链接可点击
-- **省钱省时**：多段合并成一个请求按编号返回；只翻译可视区域（多预留一屏）；已经是目标语言的段落直接跳过；结果缓存在本地
-- **动态页面**：无限滚动、单页应用切换、评论展开等新内容自动翻译，原文变了会重新翻译
-- **站点规则**：X/Twitter、GitHub、Reddit、Hacker News、Wikipedia、Stack Overflow、YouTube 评论有内置规则，可在设置页用 JSON 覆盖或新增
-- **YouTube 双语字幕**：拦截播放器自己的字幕（人工字幕和自动字幕都支持），合并成完整句子后按批翻译，在播放器里按进度显示原文 + 译文；全屏可用，切换视频自动跟上
-- **多家模型可选**：OpenAI、DeepSeek、Claude（默认 Haiku 4.5）、任意 OpenAI 兼容接口（OpenRouter、本地 Ollama 等）。每家单独保存 Key 和模型，在弹窗或设置页随时切换
+## 功能
 
-## 安装（开发版）
+**翻译**
+- **网页双语对照**：译文显示在每段原文下方，可切换「只看译文 / 只看原文」；链接、加粗、行内代码等格式保留
+- **省钱省时**：多段合并成一个请求；只翻译可视区域；已是目标语言的段落跳过；结果本地缓存
+- **动态页面**：无限滚动、单页应用切换的新内容自动翻译
+- **YouTube 双语字幕**：人工/自动字幕都支持，合并成完整句子再翻译，全屏可用；可导出双语 SRT
+- **划词翻译**：选中文字弹出译文；选中单个单词显示音标、释义、例句
+- **输入框翻译**：在聊天框、评论框里连按三下空格，把写好的中文翻译成英文（Ctrl/⌘+Z 撤销）
+- **悬停翻译**：鼠标停在段落上单独按一下 Ctrl，只翻译这一段
+- **自动翻译外语网页**（可选）、总是翻译某些网站、站点规则
+
+**学习**
+- **句子解析**：译文后点「解析」，查看句子结构、重点词汇、短语搭配、语法要点，并可「追问 AI」
+- **YouTube 学习**：点击字幕暂停视频并解析这一句
+- **生词本**：划词卡片、解析面板里点 ♥ 收藏，设置页查看、搜索、导出 CSV（可导入 Anki）
+
+**模型与数据**
+- **多家模型**：OpenAI、DeepSeek、Claude（默认 Haiku 4.5）、任意 OpenAI 兼容接口（OpenRouter、Ollama 等），各自保存 Key，随时切换
+- **设置自动备份**：设置（含 API Key）备份到浏览器账号的同步存储，重装插件后自动恢复；也可导入/导出文件
+- **用量统计**：每天每个模型的请求数和 token 数
+
+## 安装
 
 ```bash
 npm install
-npm run build          # Chrome/Edge，产物在 .output/chrome-mv3
-npm run build:firefox  # Firefox，产物在 .output/firefox-mv2
+npm run build          # Chrome / Edge，产物在 .output/chrome-mv3
+npm run build:firefox  # Firefox（MV3，含安卓版），产物在 .output/firefox-mv3
 ```
 
-Chrome：打开 `chrome://extensions` → 开启"开发者模式" → "加载已解压的扩展程序" → 选择 `.output/chrome-mv3`。
+- **Chrome / Edge**：打开 `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选择 `.output/chrome-mv3`
+- **Firefox**：`about:debugging#/runtime/this-firefox` →「临时载入附加组件」→ 选择 `.output/firefox-mv3/manifest.json`
+- **升级**：把新版本解压覆盖原文件夹，在扩展管理页点刷新。扩展 ID 已固定（`khfhjjhjhclfaaabnjnecemgknfloohp`），即使删除后重装，开启同步备份时设置和 API Key 也会自动恢复
 
-Firefox：打开 `about:debugging#/runtime/this-firefox` → "临时载入附加组件" → 选择 `.output/firefox-mv2/manifest.json`。
+### 手机上使用
 
-首次安装会自动打开设置页：在「模型服务」里选一家服务商，填入 API Key，点"测试连接"确认可用，再点"使用 XX"设为当前服务商。
-
-## 使用
-
-- 点页面右下角的「译」悬浮按钮，或按 `Alt+A`，或在扩展弹窗里点"翻译此页面"
-- 鼠标移到悬浮按钮上可切换 双语 / 译文 / 原文
-- 弹窗里可设置"总是翻译这个网站"
-- 某段失败时，段落后会出现「⚠ 重试」小标记，鼠标移上去能看到原因；悬浮按钮旁的进度条也会写明失败原因，点它重试全部失败段落
-- 导航菜单和按钮默认不翻译（译文插进去会撑乱布局）
-- YouTube：视频有字幕时自动显示双语字幕；播放器右下角的「译」按钮开关（设置页也可关闭）。已经是中文字幕的视频不叠加
+- **Android**：Firefox for Android 支持扩展（需从 addons.mozilla.org 安装，或用 Firefox Nightly 的自定义附加组件集合）；手机版 Chrome 不支持扩展
+- **iPhone / iPad**：Safari 扩展需要在 Mac 上用 Xcode 打包成 App
+- 已适配触屏：长按选词即可划词翻译，解析面板在手机上是底部弹层
 
 ## 开发
 
 ```bash
-npm run dev        # 启动带热更新的 Chrome（WXT）
+npm run dev        # 带热更新的 Chrome（WXT）
 npm test           # 单元测试（Vitest + happy-dom）
 npm run compile    # 类型检查
-npm run test:e2e   # 端到端测试：真实 Chromium 加载扩展 + 模拟 OpenAI 接口 + 模拟 YouTube 播放器
+npm run test:e2e   # 端到端测试：真实 Chromium + 模拟模型接口 + 模拟 YouTube 播放器
 ```
 
 ### 目录结构
@@ -47,63 +56,37 @@ npm run test:e2e   # 端到端测试：真实 Chromium 加载扩展 + 模拟 Ope
 ```
 src/
 ├─ entrypoints/
-│  ├─ background.ts        # Service Worker：接收翻译请求、调用模型、快捷键、右键菜单
-│  ├─ content/             # 内容脚本入口 + 译文样式
-│  ├─ youtube-main.content.ts  # YouTube 页面环境（MAIN world）：拦截播放器的字幕请求
-│  ├─ youtube.content/     # YouTube 双语字幕入口 + 样式
-│  ├─ popup/               # 工具栏弹窗（React）
-│  └─ options/             # 设置页（React）
-├─ background/
-│  ├─ translation-service.ts  # 缓存 → 去重 → 打包 → p-queue 排队限流 → 漏段补翻
-│  ├─ prompt.ts            # 系统提示词、编号打包、解析模型输出
-│  ├─ providers/           # 模型接入：OpenAI/DeepSeek/自定义走 Vercel AI SDK，Claude 走 Anthropic 官方 SDK
-│  └─ cache.ts             # Dexie (IndexedDB) 翻译缓存
+│  ├─ background.ts          # 翻译请求、模型调用、设置备份、用量、快捷键、右键菜单
+│  ├─ content/               # 网页内容脚本入口 + 译文样式
+│  ├─ youtube-main.content.ts# YouTube 页面环境：拦截播放器的字幕请求
+│  ├─ youtube.content/       # YouTube 双语字幕入口
+│  ├─ popup/                 # 工具栏弹窗（React + shadcn/ui）
+│  └─ options/               # 设置页（React + shadcn/ui，侧边栏导航）
+├─ background/               # 翻译服务、提示词、模型接入、缓存、用量
 ├─ content/
-│  ├─ extractor.ts         # 段落识别：块级元素里的连续行内内容 = 一个翻译单元
-│  ├─ serializer.ts        # 行内格式 ↔ <x0>…</x0> 占位符
-│  ├─ renderer.ts          # 插入译文、加载中/失败状态
-│  ├─ viewport.ts          # IntersectionObserver：只翻译看得到的部分
-│  ├─ dom-watcher.ts       # MutationObserver：动态内容
-│  ├─ controller.ts        # 总控
-│  └─ floating-button.ts   # Shadow DOM 悬浮按钮
-├─ youtube/
-│  ├─ subtitles.ts         # 解析 json3/XML 字幕，逐词/逐行合并成句子
-│  ├─ controller.ts        # 拦截 → 断句 → 从当前位置分批翻译 → 按进度显示；切换视频；播放器按钮
-│  ├─ overlay.ts           # 播放器内的双语字幕层（Shadow DOM）
-│  └─ bridge.ts            # 页面脚本与内容脚本的消息协议
-└─ lib/                    # 设置、消息协议、站点规则、语言检测
+│  ├─ extractor.ts / serializer.ts / renderer.ts   # 段落识别、格式占位符、渲染
+│  ├─ controller.ts / viewport.ts / dom-watcher.ts # 整页翻译调度
+│  ├─ selection.ts           # 划词翻译、查词卡片
+│  ├─ analysis-panel.ts      # 句子解析面板、追问
+│  ├─ input-translate.ts     # 输入框翻译
+│  ├─ hover-translate.ts     # 悬停翻译
+│  └─ ui/                    # 页面浮层（Shadow DOM）：样式、图标、Markdown 渲染
+├─ youtube/                  # 字幕解析断句、播放器叠加层、SRT 导出
+├─ components/ui/            # shadcn/ui 组件（Radix + Tailwind）
+└─ lib/                      # 设置、备份、生词本、消息协议、站点规则、语言检测
 ```
 
 ### 关键设计
 
-1. **API 只由 background 调用**：避开跨域，API Key 不暴露给网页，所有标签页共用一个请求队列和缓存。
-2. **批量 + 编号**：每个请求默认最多 12 段 / 3000 字符，用 `<seg id="N">` 包裹；返回的段数对不上时，只把漏掉的段落单独重发。
-3. **占位符**：`<a href>链接</a>` → `<x0>链接</x0>`，翻译后还原；模型弄乱标签时退回纯文本，保证页面不坏。
-4. **缓存键**：`hash(提示词版本 + 服务商 + 接口地址 + 模型 + 目标语言 + 系统提示词 + 原文)`，换模型、改术语表或提示词会自动用新缓存。
-5. **Claude 的参数**：Haiku 4.5 用 temperature；Sonnet 5.5 / Opus 5.5 不接受采样参数，改用 `effort: low`（翻译是简单任务，省时省钱），并在官方地址上开启服务端拒答兜底（`fallbacks: "default"`），被拒的请求由服务端自动换模型重试。
-
-### 站点规则示例
-
-```json
-[
-  {
-    "name": "example",
-    "matches": ["example.com"],
-    "blocks": [".post-title", ".comment-body"],
-    "exclude": [".sidebar", ".author", "time"],
-    "roots": ["main"]
-  }
-]
-```
-
-- `blocks`：强制把匹配元素整体当作一段（内部结构零碎时用）
-- `exclude`：不翻译
-- `roots`：只翻译这些容器内的内容
-- `name` 与内置规则相同时覆盖内置规则
+1. **API 只由 background 调用**：避开跨域，API Key 不暴露给网页，所有标签页共用请求队列和缓存
+2. **批量 + 编号**：每个请求默认最多 12 段，用 `<seg id="N">` 包裹；漏掉的段落单独补翻
+3. **占位符**：`<a>链接</a>` → `<x0>链接</x0>`，翻译后还原；标签乱了退回纯文本
+4. **页面浮层都在 Shadow DOM 里**：不受网站 CSS 影响；模型输出只用 textContent 渲染，不执行 HTML
+5. **设置备份**：按字节切块写入 `storage.sync`（每项 8KB 上限），本地为空时自动恢复
 
 ## 已知限制
 
-- "只看译文"只对整段生效；段落里夹着子段落的零散文字仍是双语显示
-- 只翻译顶层页面，不翻译 iframe 内的内容
-- YouTube 字幕依赖播放器未公开的接口和字幕请求格式，YouTube 改版后可能需要调整；没有任何字幕的视频暂不支持（需要语音识别）
-- Shorts 和移动版 YouTube 未适配
+- 「只看译文」只对整段生效
+- 只翻译顶层页面，不翻译 iframe
+- YouTube 字幕依赖播放器未公开的接口；没有字幕的视频暂不支持；Shorts 未适配
+- 同步备份依赖浏览器账号的同步功能，没登录浏览器账号时只在本机有效

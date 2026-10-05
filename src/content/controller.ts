@@ -5,7 +5,14 @@ import { GLOBAL_EXCLUDE, resolveSiteRule } from '@/lib/site-rules';
 import { safeSelector } from './dom';
 import { DomWatcher } from './dom-watcher';
 import { Extractor, type Unit } from './extractor';
-import { removeAllTranslations, removeTranslation, renderError, renderLoading, renderTranslation } from './renderer';
+import {
+  removeAllTranslations,
+  removeTranslation,
+  renderError,
+  renderLoading,
+  renderTranslation,
+  type RenderOptions,
+} from './renderer';
 import { ViewportScheduler } from './viewport';
 
 /** 网页翻译的总控：扫描段落 → 等进入可视区域 → 攒批发给 background → 渲染 */
@@ -23,7 +30,10 @@ export class PageTranslator {
   private listeners = new Set<(s: PageStatus) => void>();
   private lastError = '';
 
-  constructor(private settings: Settings) {
+  constructor(
+    private settings: Settings,
+    private renderOptions: RenderOptions = {},
+  ) {
     this.applyAppearance();
   }
 
@@ -86,6 +96,7 @@ export class PageTranslator {
     const html = document.documentElement;
     html.dataset.txMode = this.settings.displayMode;
     html.dataset.txTheme = this.settings.theme;
+    html.toggleAttribute('data-tx-learn', this.settings.learningMode);
   }
 
   setMode(mode: DisplayMode) {
@@ -238,7 +249,7 @@ export class PageTranslator {
       const t = translations[i];
       if (t != null) {
         u.state = 'done';
-        renderTranslation(u, t);
+        renderTranslation(u, t, this.renderOptions);
       } else {
         u.state = 'error';
         renderError(u, error || '翻译失败', () => this.retry(u));

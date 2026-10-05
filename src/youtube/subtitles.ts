@@ -100,9 +100,8 @@ function parseXml(xml: string, asrHint: boolean): ParsedTrack {
 }
 
 function decodeEntities(s: string) {
-  const ta = document.createElement('textarea');
-  ta.innerHTML = s;
-  return ta.value;
+  // 只取文本，不会执行任何标签
+  return new DOMParser().parseFromString(`<!doctype html><body>${s}`, 'text/html').body.textContent ?? '';
 }
 
 const SENTENCE_END = /[.!?。！？…][\s"'”’)\]]*$/;
@@ -210,4 +209,19 @@ export function currentVideoId(loc: Location = location): string {
   if (v) return v;
   const m = u.pathname.match(/^\/(?:embed|shorts|live)\/([\w-]{6,})/);
   return m?.[1] ?? '';
+}
+
+function srtTime(ms: number) {
+  const p = (n: number, w = 2) => String(Math.floor(n)).padStart(w, '0');
+  return `${p(ms / 3_600_000)}:${p((ms / 60_000) % 60)}:${p((ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+}
+
+/** 导出 SRT：每条字幕两行（原文 + 译文），没有译文的只放原文 */
+export function toSrt(lines: { start: number; end: number; text: string; translation?: string }[], mode: 'bilingual' | 'translation' = 'bilingual'): string {
+  return lines
+    .map((l, i) => {
+      const body = mode === 'translation' ? l.translation || l.text : [l.text, l.translation].filter(Boolean).join('\n');
+      return `${i + 1}\n${srtTime(l.start)} --> ${srtTime(Math.max(l.end, l.start + 500))}\n${body}\n`;
+    })
+    .join('\n');
 }
