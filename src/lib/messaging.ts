@@ -42,6 +42,14 @@ export interface AnalyzeRequest {
   translation?: string;
 }
 
+export interface SummarizeRequest {
+  title?: string;
+  url?: string;
+  /** 正文纯文本（已截断到上限） */
+  text: string;
+  truncated?: boolean;
+}
+
 export interface FollowUpRequest {
   /** 被解析的原文 */
   text: string;
@@ -90,6 +98,8 @@ interface ProtocolMap {
   translateSelection(): void;
   /** 右键菜单：解析选中的句子 */
   analyzeSelection(): void;
+  /** 右键菜单 / 弹出窗口：AI 总结当前页面 */
+  summarizePage(): void;
   /** 导出整页双语 Markdown */
   exportPage(): { filename?: string; markdown?: string; error?: string };
   /** YouTube：导出双语字幕 */

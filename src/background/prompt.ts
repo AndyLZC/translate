@@ -263,3 +263,43 @@ export function buildFollowUpPrompt(targetLang: string): string {
     'Plain text; "- " lists and **bold** are allowed, no other markdown.',
   ].join('\n');
 }
+
+/**
+ * 全文总结：先一句话讲清文章说了什么，再列要点、关键数据和作者立场；
+ * 学习模式下附上文中值得学的表达。格式和解析一样用【小节】，面板直接复用渲染。
+ */
+export function buildSummaryPrompt(targetLang: string, learning = false): string {
+  const lang = languageName(targetLang);
+  return [
+    `You summarise web articles for a ${lang} reader. Write in natural, concise ${lang}, faithful to the article: never add facts or opinions that are not in it.`,
+    'Reply in this structure, each 【section】 heading on its own line:',
+    '【一句话总结】one bold sentence "**…**" saying what the article is about and its main conclusion.',
+    '【要点】3-6 "- " items in the order the article develops them; start each with a short bold phrase, e.g. "- **储蓄见底**：…". Merge minor points instead of listing everything.',
+    '【关键信息】up to 5 "- " items with the concrete numbers, dates, names or sources that matter. Omit the section if there are none.',
+    '【作者观点】1-2 sentences on the author\'s stance, tone or what they want the reader to take away; say so plainly if it is neutral reporting.',
+    ...(learning
+      ? [
+          '【值得学习的表达】if the article is not written in ' +
+            lang +
+            ', a table of 4-6 useful words or phrases quoted exactly from it:',
+          '| 表达 | 意思 |',
+          '| --- | --- |',
+          '| phrase /IPA/ pos. | meaning in this article |',
+          'Omit the section if the article is already in ' + lang + '.',
+        ]
+      : []),
+    'Use only "- ", **bold** and the table markup shown. No greetings, no closing remarks.',
+  ].join('\n');
+}
+
+export function buildSummaryInput(req: { title?: string; url?: string; text: string; truncated?: boolean }) {
+  return [
+    req.title ? `Title: ${req.title}` : '',
+    req.url ? `URL: ${req.url}` : '',
+    req.truncated ? '(Only the first part of a long article is included.)' : '',
+    '',
+    req.text,
+  ]
+    .filter((l, i) => l || i === 3)
+    .join('\n');
+}

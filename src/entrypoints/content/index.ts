@@ -44,6 +44,7 @@ export default defineContentScript({
         void updateSettings({ displayMode: mode });
       },
       onRetryFailed: () => translator.retryFailed(),
+      onSummarize: () => void panel.openSummary(),
     });
     translator.onStatus((s) => button.update(s));
 
@@ -91,6 +92,7 @@ export default defineContentScript({
       });
     }
     onMessage('translateSelection', () => selection.translateCurrentSelection());
+    if (isTop) onMessage('summarizePage', () => void panel.openSummary());
     onMessage('analyzeSelection', () => {
       const text = window.getSelection()?.toString().trim();
       if (text) void panel.open({ text });

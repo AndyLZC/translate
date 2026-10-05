@@ -55,3 +55,14 @@ describe('解析示范例子', () => {
     expect(buildAnalysisPrompt('ja', true)).not.toContain('=== Example');
   });
 });
+
+describe('全文总结', () => {
+  it('学习模式下才要求「值得学习的表达」', async () => {
+    const { buildSummaryPrompt, buildSummaryInput } = await import('@/background/prompt');
+    expect(buildSummaryPrompt('zh-CN', true)).toContain('【值得学习的表达】');
+    expect(buildSummaryPrompt('zh-CN', false)).not.toContain('【值得学习的表达】');
+    const input = buildSummaryInput({ title: 'T', url: 'https://x', text: 'Body text', truncated: true });
+    expect(input).toBe('Title: T\nURL: https://x\n(Only the first part of a long article is included.)\n\nBody text');
+    expect(buildSummaryInput({ text: 'Body' })).toBe('\nBody');
+  });
+});

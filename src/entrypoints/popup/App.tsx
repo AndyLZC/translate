@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CircleAlert, Download, GraduationCap, Languages, LoaderCircle, MousePointerClick, RotateCcw, Settings as SettingsIcon, Star } from 'lucide-react';
+import { CircleAlert, Download, GraduationCap, Languages, LoaderCircle, MousePointerClick, RotateCcw, Settings as SettingsIcon, Sparkles, Star } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -77,6 +77,13 @@ export default function App() {
   const inList = (list: string[]) => !!host && list.some((p) => hostMatches(host, p));
   const openOptions = (hash = '') => {
     void browser.tabs.create({ url: browser.runtime.getURL(`/options.html${hash}`) });
+    window.close();
+  };
+
+  // 总结面板显示在网页里，打开后关掉弹出窗口
+  const summarizePage = async () => {
+    if (tabId == null) return;
+    await sendMessage('summarizePage', undefined, { tabId, frameId: 0 }).catch(() => {});
     window.close();
   };
 
@@ -162,6 +169,10 @@ export default function App() {
               {busy ? <LoaderCircle className="animate-spin" /> : status?.enabled ? <RotateCcw /> : <Languages />}
               {status?.enabled ? '显示原文' : '翻译此页面'}
               <kbd className="ml-1 rounded border border-current/25 px-1.5 font-mono text-[10px] opacity-70">Alt+A</kbd>
+            </Button>
+            <Button size="sm" variant="ghost" className="w-full" onClick={summarizePage}>
+              <Sparkles />
+              AI 总结本页
             </Button>
             {status?.enabled && status.total > 0 && (
               <div className="space-y-1">

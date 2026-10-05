@@ -3,6 +3,7 @@ import type {
   AnalyzeRequest,
   ChatTurn,
   FollowUpRequest,
+  SummarizeRequest,
   TranslateRequest,
   TranslateResponse,
   TranslateTextRequest,
@@ -15,6 +16,8 @@ import {
   buildAnalysisPrompt,
   buildDictionaryPrompt,
   buildFollowUpPrompt,
+  buildSummaryInput,
+  buildSummaryPrompt,
   buildSystemPrompt,
   buildTextPrompt,
   buildUserPrompt,
@@ -243,6 +246,42 @@ export class TranslationService {
       const out = (
         await this.getInteractiveQueue(settings).add(() => this.callStream(system, buildAnalysisInput(text, translation), settings, onDelta, signal))
       )!.trim();
+      if (out) await this.deps.cache.putMany([{ key, text: out }]);
+      return { text: out };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  /** 全文总结（流式）：和解析一样走交互队列、可用单独的解析服务商；按正文缓存 */
+  async summarizeStream(
+    req: SummarizeRequest,
+    onDelta: (t: string) => void,
+    configError?: (s: Settings) => string | null,
+    signal?: AbortSignal,
+  ): Promise<{ text?: string; error?: string }> {
+    const settings = this.analysisSettings(await this.deps.getSettings());
+    const err = configError?.(settings);
+    if (err) return { error: err };
+    const system = buildSummaryPrompt(settings.targetLang, settings.learningMode);
+    const input = buildSummaryInput(req);
+    const provider = settings.providers[settings.activeProvider];
+    const key = await this.deps.cache.hashKey([
+      PROMPT_VERSION,
+      'summarize',
+      settings.activeProvider,
+      provider.baseURL,
+      provider.model,
+      await this.deps.cache.hashKey([system]),
+      input,
+    ]);
+    const [cached] = await this.deps.cache.getMany([key]);
+    if (cached != null) {
+      onDelta(cached);
+      return { text: cached };
+    }
+    try {
+      const out = (await this.getInteractiveQueue(settings).add(() => this.callStream(system, input, settings, onDelta, signal)))!.trim();
       if (out) await this.deps.cache.putMany([{ key, text: out }]);
       return { text: out };
     } catch (e) {

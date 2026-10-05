@@ -128,7 +128,9 @@ export default defineBackground(() => {
       const res =
         req.type === 'analyze'
           ? await service.analyzeStream(req, onDelta, configError, abort.signal)
-          : await service.followUpStream(req, onDelta, configError, abort.signal);
+          : req.type === 'summarize'
+            ? await service.summarizeStream(req, onDelta, configError, abort.signal)
+            : await service.followUpStream(req, onDelta, configError, abort.signal);
       send(res.error ? { type: 'error', error: res.error } : { type: 'done', text: res.text ?? '' });
     });
   });
@@ -185,6 +187,7 @@ export default defineBackground(() => {
     if (!browser.contextMenus) return;
     browser.contextMenus.removeAll(() => {
       browser.contextMenus.create({ id: 'toggle-translation', title: '翻译 / 还原此页面', contexts: ['page'] });
+      browser.contextMenus.create({ id: 'summarize-page', title: 'AI 总结这个页面', contexts: ['page'] });
       browser.contextMenus.create({ id: 'translate-selection', title: '翻译「%s」', contexts: ['selection'] });
       browser.contextMenus.create({ id: 'analyze-selection', title: '解析这句话（学习模式）', contexts: ['selection'] });
     });
@@ -203,6 +206,7 @@ export default defineBackground(() => {
   browser.contextMenus?.onClicked.addListener((info, tab) => {
     if (tab?.id == null) return;
     if (info.menuItemId === 'toggle-translation') void toggleTab(tab.id);
+    if (info.menuItemId === 'summarize-page') void sendMessage('summarizePage', undefined, { tabId: tab.id, frameId: 0 }).catch(() => {});
     // 发给选中文字所在的框架（可能是 iframe）
     const target = { tabId: tab.id, frameId: info.frameId ?? 0 };
     if (info.menuItemId === 'translate-selection') void sendMessage('translateSelection', undefined, target).catch(() => {});

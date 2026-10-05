@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import type { AnalyzeRequest, FollowUpRequest } from './messaging';
+import type { AnalyzeRequest, FollowUpRequest, SummarizeRequest } from './messaging';
 
 /**
  * 流式请求：内容脚本 ↔ background 用长连接（Port）逐段推送模型输出。
@@ -7,7 +7,10 @@ import type { AnalyzeRequest, FollowUpRequest } from './messaging';
  */
 export const STREAM_PORT = 'ai-stream';
 
-export type StreamRequest = ({ type: 'analyze' } & AnalyzeRequest) | ({ type: 'followUp' } & FollowUpRequest);
+export type StreamRequest =
+  | ({ type: 'analyze' } & AnalyzeRequest)
+  | ({ type: 'followUp' } & FollowUpRequest)
+  | ({ type: 'summarize' } & SummarizeRequest);
 
 export type StreamEvent = { type: 'delta'; text: string } | { type: 'done'; text: string } | { type: 'error'; error: string };
 
