@@ -172,3 +172,42 @@ describe('学习模式', () => {
     expect(complete.mock.calls[1][0].messages!.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user']);
   });
 });
+
+describe('交互请求单独排队', () => {
+  it('整页翻译占满并发时，解析不用排队等待', async () => {
+    let releasePage!: () => void;
+    const pageGate = new Promise<void>((r) => (releasePage = r));
+    const complete = vi.fn<CompleteFn>(async ({ prompt, system }) => {
+      if (system.includes('【句子结构】')) return '【句子结构】ok';
+      await pageGate; // 整页翻译的请求一直卡着
+      return (prompt ?? '').replace(/<seg id="(\d+)">([\s\S]*?)<\/seg>/g, '<seg id="$1">译</seg>');
+    });
+    const svc = new TranslationService({ getSettings: async () => ({ ...settings, concurrency: 1, batchSize: 1 }), complete, cache: memoryCache() });
+    const page = svc.translate({ texts: ['a', 'b', 'c'] });
+    const analysis = await Promise.race([
+      svc.analyze({ text: 'Soil matters a lot.' }),
+      new Promise((r) => setTimeout(() => r('timeout'), 500)),
+    ]);
+    expect(analysis).toEqual({ text: '【句子结构】ok' });
+    releasePage();
+    await page;
+  });
+
+  it('流式解析：逐段回调，命中缓存时一次给出全文', async () => {
+    const deltas: string[] = [];
+    const svc = new TranslationService({
+      getSettings: async () => settings,
+      complete: vi.fn<CompleteFn>(),
+      stream: async (_args, onDelta) => {
+        for (const p of ['【句子', '结构】', 'ok']) onDelta(p);
+        return { text: '【句子结构】ok' };
+      },
+      cache: memoryCache(),
+    });
+    expect(await svc.analyzeStream({ text: 'x y', translation: '译' }, (d) => deltas.push(d))).toEqual({ text: '【句子结构】ok' });
+    expect(deltas).toEqual(['【句子', '结构】', 'ok']);
+    const again: string[] = [];
+    await svc.analyzeStream({ text: 'x y', translation: '译' }, (d) => again.push(d));
+    expect(again).toEqual(['【句子结构】ok']);
+  });
+});

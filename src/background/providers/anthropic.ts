@@ -13,24 +13,11 @@ const isHaiku = (model: string) => model.startsWith('claude-haiku');
 export class ClaudeRefusalError extends Error {}
 
 /** Claude 走 Anthropic 官方 SDK */
-export async function completeAnthropic({ system, messages, config, baseURL, temperature, signal, useOfficialEndpoint }: CompletionRequest) {
-  const client = new Anthropic({
-    apiKey: config.apiKey,
-    baseURL,
-    // 扩展的 background 属于浏览器环境；Key 只存在本机，且只发往 Anthropic，不会暴露给网页
-    dangerouslyAllowBrowser: true,
-    maxRetries: 2,
-  });
+export async function completeAnthropic(req: CompletionRequest) {
+  const { config, signal, useOfficialEndpoint } = req;
+  const client = makeClient(req);
 
-  const params = {
-    model: config.model,
-    max_tokens: MAX_TOKENS,
-    system,
-    messages,
-    // 翻译是简单任务：Haiku 用低温度保持稳定；新模型用 low effort 省时省钱
-    ...(isHaiku(config.model) ? { temperature } : { output_config: { effort: 'low' as const } }),
-  };
-
+  const params = buildParams(req);
   const response =
     useOfficialEndpoint && FALLBACK_MODELS.has(config.model)
       ? await client.beta.messages.create(
@@ -46,5 +33,46 @@ export async function completeAnthropic({ system, messages, config, baseURL, tem
   return {
     text: response.content.map((b) => (b.type === 'text' ? b.text : '')).join(''),
     usage: { inputTokens: response.usage.input_tokens ?? 0, outputTokens: response.usage.output_tokens ?? 0 },
+  };
+}
+
+function buildParams({ system, messages, config, temperature }: CompletionRequest) {
+  return {
+    model: config.model,
+    max_tokens: MAX_TOKENS,
+    system,
+    messages,
+    // 翻译是简单任务：Haiku 用低温度保持稳定；新模型用 low effort 省时省钱
+    ...(isHaiku(config.model) ? { temperature } : { output_config: { effort: 'low' as const } }),
+  };
+}
+
+function makeClient({ config, baseURL }: CompletionRequest) {
+  return new Anthropic({
+    apiKey: config.apiKey,
+    baseURL,
+    // 扩展的 background 属于浏览器环境；Key 只存在本机，且只发往 Anthropic，不会暴露给网页
+    dangerouslyAllowBrowser: true,
+    maxRetries: 2,
+  });
+}
+
+/** 流式输出：每收到一段文字就回调，结束时返回完整结果 */
+export async function streamAnthropic(req: CompletionRequest, onDelta: (text: string) => void) {
+  const client = makeClient(req);
+  const params = buildParams(req);
+  const onText = (delta: string) => onDelta(delta);
+  // 两种流的类型不同，分开处理
+  const message = req.useOfficialEndpoint && FALLBACK_MODELS.has(req.config.model)
+    ? await client.beta.messages
+        .stream({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }, { signal: req.signal })
+        .on('text', onText)
+        .finalMessage()
+    : await client.messages.stream(params, { signal: req.signal }).on('text', onText).finalMessage();
+  if (message.stop_reason === 'refusal') throw new ClaudeRefusalError('Claude 拒绝回答这部分内容，可换一个模型再试');
+  const text = (message.content as { type: string; text?: string }[]).map((b) => (b.type === 'text' ? b.text ?? '' : '')).join('');
+  return {
+    text,
+    usage: { inputTokens: message.usage.input_tokens ?? 0, outputTokens: message.usage.output_tokens ?? 0 },
   };
 }

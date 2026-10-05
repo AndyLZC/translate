@@ -59,7 +59,18 @@ const server = http.createServer(async (req, res) => {
   const json = JSON.parse(body);
   const system = json.messages.find((m) => m.role === 'system')?.content ?? '';
   const messages = json.messages.filter((m) => m.role !== 'system');
-  calls.push({ system, messages });
+  calls.push({ system, messages, stream: !!json.stream });
+  if (json.stream) {
+    // OpenAI 流式格式（SSE）：按 8 个字符一块慢慢推，测试能看到逐步显示
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+    const text = reply(system, messages);
+    for (let i = 0; i < text.length; i += 8) {
+      res.write(`data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', created: 0, model: 'm', choices: [{ index: 0, delta: { content: text.slice(i, i + 8) }, finish_reason: null }] })}\n\n`);
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    res.write(`data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', created: 0, model: 'm', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\n`);
+    return res.end('data: [DONE]\n\n');
+  }
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ id: 'x', object: 'chat.completion', created: 0, model: 'm', choices: [{ index: 0, message: { role: 'assistant', content: reply(system, messages) }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
 });
@@ -132,15 +143,31 @@ try {
   });
   check('「解析」放在原文句末、译文之前', (await page.locator('#p1 tx-learn').isVisible()) && placement.next === 'TX-TRANSLATION' && placement.prev === 'soil.' && !placement.inTranslation, JSON.stringify(placement));
   await page.locator('#p1 tx-learn').click();
-  await page.locator('tx-ui .panel .md li').first().waitFor({ timeout: 10000 });
+  // 流式：先看到正在生成（带光标）的部分内容，再等全部完成
+  await page.locator('tx-ui .panel .md .caret').waitFor({ timeout: 10000 });
+  const partial = (await page.locator('tx-ui .panel .md').textContent()).length;
+  await page.locator('tx-ui .panel .md h4:has-text("语法要点") ~ ul li').first().waitFor({ timeout: 10000 });
+  await page.waitForFunction(() => !document.querySelector('tx-ui').shadowRoot.querySelector('.panel .md .caret'), null, { timeout: 10000 });
+  const full = (await page.locator('tx-ui .panel .md').textContent()).length;
+  const analyzeCall = calls.find((c) => c.system.includes('【句子结构】'));
+  check('解析流式输出：先显示部分内容，完成后光标消失', partial > 0 && partial < full && analyzeCall.stream, `${partial} → ${full}`);
+  check('页面已有译文时不让模型重复翻译', !analyzeCall.system.includes('【译文】') && analyzeCall.messages[0].content.includes('Reference translation'));
   const orig = await page.locator('tx-ui .panel .sentence .orig').textContent();
   const sections = await page.locator('tx-ui .panel .md h4').allTextContents();
   check('解析面板：原文、句子结构、重点词汇、语法要点', orig.startsWith('These unloved critters') && sections.join(',') === '句子结构,重点词汇,语法要点', sections.join(','));
   check('解析面板：加粗标签渲染、不显示原始 ** 符号', (await page.locator('tx-ui .panel .md strong').first().textContent()) === '主语' && !(await page.locator('tx-ui .panel .md').textContent()).includes('**'));
+  const layers = await page.evaluate(() => {
+    const md = document.querySelector('tx-ui').shadowRoot.querySelector('.panel .md');
+    return { term: md.querySelector('.term')?.textContent, phon: md.querySelector('.phon')?.textContent, pos: md.querySelector('.pos')?.textContent, en: md.querySelector('li .en')?.textContent };
+  });
+  check('解析分层显示：英文原文、音标、词性分别标出', layers.term === 'along with countless earthworms' && layers.phon === '/ˈden.ɪ.zən/' && layers.pos === 'n.', JSON.stringify(layers));
 
   await page.locator('tx-ui .panel-foot input').fill('what 在这里是什么用法？');
   await page.keyboard.press('Enter');
-  await page.locator('tx-ui .bubble.a p').waitFor({ timeout: 10000 });
+  await page.waitForFunction(() => {
+    const a = document.querySelector('tx-ui').shadowRoot.querySelector('.bubble.a');
+    return a && a.textContent.includes('引导宾语从句') && !a.querySelector('.caret');
+  }, null, { timeout: 10000 });
   const last = calls.at(-1);
   check('追问 AI：带上原文和解析，多轮对话', (await page.locator('tx-ui .bubble.a').textContent()).includes('引导宾语从句') && last.messages.length === 3 && last.messages[1].content.includes('【句子结构】'));
   if (shots) await page.screenshot({ animations: 'disabled', path: `${shots}/feat-analysis.png` });

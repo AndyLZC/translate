@@ -126,20 +126,27 @@ export function isSingleWord(text: string): boolean {
   return t.length <= 32 && /^\p{L}[\p{L}'’-]*$/u.test(t);
 }
 
-/** 学习模式：长难句解析。固定的分节格式，方便插件渲染 */
-export function buildAnalysisPrompt(targetLang: string): string {
+/**
+ * 学习模式：长难句解析。固定的分节格式，方便插件渲染；每节限制条数，输出更短、更快。
+ * 页面上已有译文时不再让模型重复翻译，直接作为参考给它。
+ */
+export function buildAnalysisPrompt(targetLang: string, hasTranslation = false): string {
   const lang = languageName(targetLang);
   return [
-    `You are an experienced language teacher. The user is a ${lang} speaker learning the language of the passage they send. Explain it in ${lang}.`,
-    'If the passage has several sentences, translate all of it but focus the structure analysis on the one or two hardest sentences.',
-    'Reply using exactly these sections, each starting with its heading on its own line, and nothing else:',
-    '【译文】a natural, faithful translation.',
-    '【句子结构】the main clause first ("**主语**：…", "**谓语**：…", "**宾语/表语**：…"), then each clause or long modifier as a "- " list item saying what it is and what it modifies.',
-    '【重点词汇】3-6 of the harder words as "- word /IPA/ pos. meaning（in context）".',
-    '【短语搭配】useful phrases or collocations as "- phrase：meaning". Omit this section if there are none.',
-    '【语法要点】1-3 short "- " items on the grammar worth learning here.',
-    'Use **bold** only for labels. No other markdown, no greetings, no closing remarks.',
+    `You are an experienced language teacher. The user is a ${lang} speaker learning the language of the passage they send. Explain it in ${lang}, concisely.`,
+    'If the passage has several sentences, focus on the one or two hardest sentences.',
+    'Reply using exactly these sections, each heading on its own line, and nothing else:',
+    ...(hasTranslation ? [] : ['【译文】a natural, faithful translation.']),
+    '【句子结构】first the main clause, one line each: "**主语**：…", "**谓语**：…", "**宾语/表语**：…" (only the parts that exist). Then at most 4 "- " items for clauses or long modifiers, each as "original words：what it is and what it modifies" in one short line.',
+    '【重点词汇】3-5 of the harder words, each as "- word /IPA/ pos. meaning in context".',
+    '【短语搭配】at most 3 "- phrase：meaning" items. Omit the section if there are none.',
+    '【语法要点】1-2 short "- " items on the grammar worth learning here.',
+    'Quote original words exactly. Use **bold** only for the labels above. No other markdown, no greetings, no closing remarks.',
   ].join('\n');
+}
+
+export function buildAnalysisInput(text: string, translation?: string) {
+  return translation ? `${text}\n\n(Reference translation, do not repeat it: ${translation})` : text;
 }
 
 /** 追问：基于解析继续回答 */

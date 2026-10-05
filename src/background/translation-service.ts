@@ -10,6 +10,7 @@ import type {
 } from '@/lib/messaging';
 import type { Settings } from '@/lib/settings';
 import {
+  buildAnalysisInput,
   buildAnalysisPrompt,
   buildDictionaryPrompt,
   buildFollowUpPrompt,
@@ -40,9 +41,17 @@ export type CompleteFn = (args: {
   settings: Settings;
 }) => Promise<string | { text: string; usage?: Usage }>;
 
+/** 流式调用模型：边生成边回调 */
+export type StreamFn = (
+  args: { system: string; prompt?: string; messages?: ChatTurn[]; settings: Settings; signal?: AbortSignal },
+  onDelta: (text: string) => void,
+) => Promise<{ text: string; usage?: Usage }>;
+
 export interface ServiceDeps {
   getSettings(): Promise<Settings>;
   complete: CompleteFn;
+  /** 不提供时退回一次性调用（测试用） */
+  stream?: StreamFn;
   cache: CacheLike;
   /** 每次真正请求模型后回调，用于用量统计 */
   onUsage?(info: { model: string; chars: number; usage?: Usage }): void;
@@ -55,6 +64,9 @@ export interface ServiceDeps {
 export class TranslationService {
   private queue: PQueue | undefined;
   private queueKey = '';
+  /** 解析、追问、划词等用户正在等的请求，单独一个队列，不排在整页翻译后面 */
+  private interactiveQueue: PQueue | undefined;
+  private interactiveKey = '';
   /** 正在翻译中的同一段原文，后来的请求直接等它的结果 */
   private inflight = new Map<string, Promise<string | null>>();
 
@@ -84,51 +96,16 @@ export class TranslationService {
     return out.text;
   }
 
-  /** 学习模式：句子解析（结果缓存） */
+  /** 学习模式：句子解析（一次性返回） */
   async analyze(req: AnalyzeRequest, configError?: (s: Settings) => string | null): Promise<{ text?: string; error?: string }> {
-    const settings = await this.deps.getSettings();
-    const err = configError?.(settings);
-    if (err) return { error: err };
-    const text = req.text.trim();
-    const system = buildAnalysisPrompt(settings.targetLang);
-    const provider = settings.providers[settings.activeProvider];
-    const key = await this.deps.cache.hashKey([
-      PROMPT_VERSION,
-      'analyze',
-      settings.activeProvider,
-      provider.baseURL,
-      provider.model,
-      await this.deps.cache.hashKey([system]),
-      text,
-    ]);
-    const [cached] = await this.deps.cache.getMany([key]);
-    if (cached != null) return { text: cached };
-    try {
-      const out = (await this.getQueue(settings).add(() => this.call(system, text, settings)))!.trim();
-      if (out) await this.deps.cache.putMany([{ key, text: out }]);
-      return { text: out };
-    } catch (e) {
-      return { error: errorMessage(e) };
-    }
+    let text = '';
+    const res = await this.analyzeStream(req, (t) => (text += t), configError);
+    return res.error ? res : { text: res.text ?? text };
   }
 
-  /** 学习模式：追问（多轮，不缓存） */
+  /** 学习模式：追问（一次性返回） */
   async followUp(req: FollowUpRequest, configError?: (s: Settings) => string | null): Promise<{ text?: string; error?: string }> {
-    const settings = await this.deps.getSettings();
-    const err = configError?.(settings);
-    if (err) return { error: err };
-    const messages: ChatTurn[] = [
-      { role: 'user', content: req.text },
-      { role: 'assistant', content: req.analysis },
-      ...req.history.slice(-10),
-      { role: 'user', content: req.question },
-    ];
-    try {
-      const out = await this.getQueue(settings).add(() => this.call(buildFollowUpPrompt(settings.targetLang), messages, settings));
-      return { text: out!.trim() };
-    } catch (e) {
-      return { error: errorMessage(e) };
-    }
+    return this.followUpStream(req, () => {}, configError);
   }
 
   /** 单段文字：划词、查词、输入框翻译 */
@@ -160,12 +137,108 @@ export class TranslationService {
     if (cached != null) return { text: cached, dictionary };
 
     try {
-      const out = (await this.getQueue(settings).add(() => this.call(system, text, settings)))!.trim();
+      const out = (await this.getInteractiveQueue(settings).add(() => this.call(system, text, settings)))!.trim();
       if (out) await this.deps.cache.putMany([{ key, text: out }]);
       return { text: out, dictionary };
     } catch (e) {
       return { error: errorMessage(e) };
     }
+  }
+
+  private getInteractiveQueue(s: Settings) {
+    const key = `${s.requestsPerMinute}`;
+    if (!this.interactiveQueue || key !== this.interactiveKey) {
+      this.interactiveKey = key;
+      this.interactiveQueue = new PQueue({
+        concurrency: 3,
+        ...(s.requestsPerMinute > 0 ? { intervalCap: s.requestsPerMinute, interval: 60_000 } : {}),
+      });
+    }
+    return this.interactiveQueue;
+  }
+
+  /** 流式调用；没有流式实现时一次性返回 */
+  private async callStream(
+    system: string,
+    input: string | ChatTurn[],
+    settings: Settings,
+    onDelta: (t: string) => void,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    if (!this.deps.stream) {
+      const text = await this.call(system, input, settings);
+      onDelta(text);
+      return text;
+    }
+    const args = typeof input === 'string' ? { system, prompt: input, settings, signal } : { system, messages: input, settings, signal };
+    const out = await this.deps.stream(args, onDelta);
+    const p = settings.providers[settings.activeProvider];
+    const chars = typeof input === 'string' ? input.length : input.reduce((n, m) => n + m.content.length, 0);
+    this.deps.onUsage?.({ model: `${settings.activeProvider}/${p.model}`, chars, usage: out.usage });
+    return out.text;
+  }
+
+  /** 解析（流式）：命中缓存时一次性返回全文 */
+  async analyzeStream(
+    req: AnalyzeRequest,
+    onDelta: (t: string) => void,
+    configError?: (s: Settings) => string | null,
+    signal?: AbortSignal,
+  ): Promise<{ text?: string; error?: string }> {
+    const settings = await this.deps.getSettings();
+    const err = configError?.(settings);
+    if (err) return { error: err };
+    const text = req.text.trim();
+    const translation = req.translation?.trim() || undefined;
+    const system = buildAnalysisPrompt(settings.targetLang, !!translation);
+    const key = await this.analysisKey(settings, system, text);
+    const [cached] = await this.deps.cache.getMany([key]);
+    if (cached != null) {
+      onDelta(cached);
+      return { text: cached };
+    }
+    try {
+      const out = (
+        await this.getInteractiveQueue(settings).add(() => this.callStream(system, buildAnalysisInput(text, translation), settings, onDelta, signal))
+      )!.trim();
+      if (out) await this.deps.cache.putMany([{ key, text: out }]);
+      return { text: out };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  /** 追问（流式，不缓存） */
+  async followUpStream(
+    req: FollowUpRequest,
+    onDelta: (t: string) => void,
+    configError?: (s: Settings) => string | null,
+    signal?: AbortSignal,
+  ): Promise<{ text?: string; error?: string }> {
+    const settings = await this.deps.getSettings();
+    const err = configError?.(settings);
+    if (err) return { error: err };
+    try {
+      const out = await this.getInteractiveQueue(settings).add(() =>
+        this.callStream(buildFollowUpPrompt(settings.targetLang), followUpMessages(req), settings, onDelta, signal),
+      );
+      return { text: out!.trim() };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  private async analysisKey(settings: Settings, system: string, text: string) {
+    const provider = settings.providers[settings.activeProvider];
+    return this.deps.cache.hashKey([
+      PROMPT_VERSION,
+      'analyze',
+      settings.activeProvider,
+      provider.baseURL,
+      provider.model,
+      await this.deps.cache.hashKey([system]),
+      text,
+    ]);
   }
 
   async translate(req: TranslateRequest, configError?: (s: Settings) => string | null): Promise<TranslateResponse> {
@@ -286,6 +359,15 @@ export class TranslationService {
 const MAX_SINGLE_RETRIES = 20;
 const SUBTITLE_BATCH_SIZE = 40;
 const SUBTITLE_BATCH_CHARS = 6000;
+
+function followUpMessages(req: FollowUpRequest): ChatTurn[] {
+  return [
+    { role: 'user', content: buildAnalysisInput(req.text) },
+    { role: 'assistant', content: req.analysis },
+    ...req.history.slice(-10),
+    { role: 'user', content: req.question },
+  ];
+}
 
 export function chunkTexts<T extends { text: string }>(items: T[], maxCount: number, maxChars: number): T[][] {
   const chunks: T[][] = [];

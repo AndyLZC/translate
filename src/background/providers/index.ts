@@ -1,7 +1,7 @@
 import { providerPreset, resolveBaseURL, type ProviderConfig, type ProviderType } from '@/lib/providers';
 import { activeProviderConfig, type Settings } from '@/lib/settings';
-import { completeAnthropic } from './anthropic';
-import { completeOpenAICompatible } from './openai-compatible';
+import { completeAnthropic, streamAnthropic } from './anthropic';
+import { completeOpenAICompatible, streamOpenAICompatible } from './openai-compatible';
 
 const REQUEST_TIMEOUT = 90_000;
 
@@ -28,14 +28,28 @@ export interface CompletionRequest {
 }
 
 /** 用当前选中的服务商（或指定的服务商）完成一次请求 */
-export async function complete(args: {
+interface CompleteArgs {
   system: string;
   /** 单轮请求的用户消息；多轮对话用 messages */
   prompt?: string;
   messages?: ChatMessage[];
   settings: Settings;
   provider?: { type: ProviderType; config: ProviderConfig };
-}): Promise<CompletionResult> {
+}
+
+export async function complete(args: CompleteArgs): Promise<CompletionResult> {
+  const { type, req } = buildRequest(args);
+  return type === 'anthropic' ? completeAnthropic(req) : completeOpenAICompatible(req);
+}
+
+/** 流式版本：解析、追问这类长输出用，边生成边显示 */
+export async function stream(args: CompleteArgs & { signal?: AbortSignal }, onDelta: (text: string) => void): Promise<CompletionResult> {
+  const { type, req } = buildRequest(args);
+  if (args.signal) req.signal = AbortSignal.any([req.signal, args.signal]);
+  return type === 'anthropic' ? streamAnthropic(req, onDelta) : streamOpenAICompatible(req, onDelta);
+}
+
+function buildRequest(args: CompleteArgs) {
   const type = args.provider?.type ?? args.settings.activeProvider;
   const config = args.provider?.config ?? activeProviderConfig(args.settings);
   const baseURL = resolveBaseURL(type, config);
@@ -48,5 +62,5 @@ export async function complete(args: {
     temperature: args.settings.temperature,
     signal: AbortSignal.timeout(REQUEST_TIMEOUT),
   };
-  return type === 'anthropic' ? completeAnthropic(req) : completeOpenAICompatible(req);
+  return { type, req };
 }

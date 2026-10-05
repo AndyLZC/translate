@@ -38,6 +38,8 @@ export interface ChatTurn {
 
 export interface AnalyzeRequest {
   text: string;
+  /** 页面上已有的译文：有的话模型不再重复翻译 */
+  translation?: string;
 }
 
 export interface FollowUpRequest {

@@ -1,4 +1,5 @@
-import { sendMessage, type ChatTurn } from '@/lib/messaging';
+import type { ChatTurn } from '@/lib/messaging';
+import { streamRequest } from '@/lib/stream';
 import { addNote, hasNote, removeNoteByText } from '@/lib/notebook';
 import { copyText, h, icon, iconButton, speak, toast, uiRoot } from './ui/host';
 import { renderMarkdown, splitSections } from './ui/markdown';
@@ -16,6 +17,8 @@ export interface AnalyzeTarget {
  */
 export class AnalysisPanel {
   private layer: HTMLElement | null = null;
+  /** 正在进行的流式请求；关闭面板时取消，省 token */
+  private aborts: (() => void)[] = [];
   private onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') this.close();
   };
@@ -25,6 +28,8 @@ export class AnalysisPanel {
   }
 
   close() {
+    this.aborts.forEach((a) => a());
+    this.aborts = [];
     this.layer?.remove();
     this.layer = null;
     document.removeEventListener('keydown', this.onKey, true);
@@ -99,10 +104,19 @@ export class AnalysisPanel {
       input.value = '';
       sendBtn.disabled = true;
       chatEl.append(h('div', { class: 'bubble q', text: question }));
-      const answer = h('div', { class: 'bubble a' }, skeleton());
+      const answer = h('div', { class: 'bubble a md' }, skeleton());
       chatEl.append(answer);
       answer.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      const res = await sendMessage('followUp', { text, analysis, history, question }).catch((e) => ({ error: String(e), text: undefined }));
+      const req = streamRequest({ type: 'followUp', text, analysis, history: [...history], question }, (_d, full) =>
+        throttle(() => {
+          answer.replaceChildren(renderMarkdown(full));
+          addCaret(answer);
+          answer.scrollIntoView({ block: 'nearest' });
+        }),
+      );
+      this.aborts.push(req.abort);
+      const res = await req.result;
+      cancelThrottle();
       sendBtn.disabled = false;
       if (res.text) {
         history.push({ role: 'user', content: question }, { role: 'assistant', content: res.text });
@@ -127,19 +141,57 @@ export class AnalysisPanel {
     layer.append(panel);
     root.append(layer);
 
-    const res = await sendMessage('analyze', { text }).catch((e) => ({ error: String(e), text: undefined }));
+    // 边生成边显示：第一段文字通常一秒内就到
+    const show = (full: string, streaming: boolean) => {
+      const sections = splitSections(full);
+      const tr = sections.find((sec) => sec.title === '译文');
+      if (!target.translation && tr) trEl.textContent = tr.body;
+      const rest = sections
+        .filter((sec) => sec.title !== '译文')
+        .map((sec) => (sec.title ? `【${sec.title}】\n${sec.body}` : sec.body))
+        .join('\n\n');
+      if (!rest.trim() && streaming) return; // 还在输出译文部分，先保留骨架屏
+      analysisEl.replaceChildren(renderMarkdown(rest));
+      if (streaming) addCaret(analysisEl);
+    };
+    const req = streamRequest({ type: 'analyze', text, translation: target.translation }, (_d, full) => throttle(() => show(full, true)));
+    this.aborts.push(req.abort);
+    const res = await req.result;
     if (this.layer !== layer) return;
     if (!res.text) {
       analysisEl.replaceChildren(h('div', { class: 'error', text: res.error ?? '解析失败' }));
       return;
     }
     analysis = res.text;
-    const sections = splitSections(res.text);
-    const tr = sections.find((s) => s.title === '译文');
-    if (!target.translation && tr) trEl.textContent = tr.body;
-    const rest = sections.filter((s) => s.title !== '译文').map((s) => (s.title ? `【${s.title}】\n${s.body}` : s.body)).join('\n\n');
-    analysisEl.replaceChildren(renderMarkdown(rest));
+    cancelThrottle();
+    show(res.text, false);
   }
+}
+
+/** 合并高频的流式更新：最多每 60ms 重绘一次 */
+let pending: (() => void) | null = null;
+let timer: ReturnType<typeof setTimeout> | undefined;
+function throttle(fn: () => void) {
+  pending = fn;
+  timer ??= setTimeout(() => {
+    timer = undefined;
+    const f = pending;
+    pending = null;
+    f?.();
+  }, 60);
+}
+function cancelThrottle() {
+  clearTimeout(timer);
+  timer = undefined;
+  pending = null;
+}
+
+/** 在最后一行末尾显示闪烁的光标，表示还在生成 */
+function addCaret(container: HTMLElement) {
+  let target: Element = container;
+  while (target.lastElementChild && !target.lastElementChild.classList.contains('caret')) target = target.lastElementChild;
+  if (target.tagName === 'SPAN') target = target.parentElement ?? container;
+  target.append(h('span', { class: 'caret' }));
 }
 
 function skeleton() {

@@ -1,12 +1,13 @@
 import { browser } from 'wxt/browser';
 import * as cache from '@/background/cache';
 import { languageName } from '@/background/prompt';
-import { complete } from '@/background/providers';
+import { complete, stream } from '@/background/providers';
 import { errorMessage, TranslationService } from '@/background/translation-service';
 import { UsageRecorder } from '@/background/usage';
 import { onMessage, sendMessage } from '@/lib/messaging';
 import { providerConfigError } from '@/lib/providers';
 import { clearBackup, readBackup, writeBackup } from '@/lib/backup';
+import { STREAM_PORT, type StreamEvent, type StreamRequest } from '@/lib/stream';
 import { activeProviderConfig, getSettings, settingsItem, watchSettings, type Settings } from '@/lib/settings';
 
 const configError = (s: Settings) => providerConfigError(s.activeProvider, activeProviderConfig(s));
@@ -80,6 +81,7 @@ export default defineBackground(() => {
   const service = new TranslationService({
     getSettings,
     complete,
+    stream: (args, onDelta) => stream(args, onDelta),
     cache,
     onUsage: ({ model, chars, usage: u }) =>
       usage.record(model, { requests: 1, chars, inputTokens: u?.inputTokens ?? 0, outputTokens: u?.outputTokens ?? 0 }),
@@ -107,6 +109,28 @@ export default defineBackground(() => {
     } catch (e) {
       return { ok: false, message: errorMessage(e) };
     }
+  });
+
+  // 流式请求（解析、追问）：边生成边推给页面；页面关闭面板时断开连接，这里取消请求
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== STREAM_PORT) return;
+    const abort = new AbortController();
+    let open = true;
+    port.onDisconnect.addListener(() => {
+      open = false;
+      abort.abort();
+    });
+    const send = (e: StreamEvent) => {
+      if (open) port.postMessage(e);
+    };
+    port.onMessage.addListener(async (req: StreamRequest) => {
+      const onDelta = (text: string) => send({ type: 'delta', text });
+      const res =
+        req.type === 'analyze'
+          ? await service.analyzeStream(req, onDelta, configError, abort.signal)
+          : await service.followUpStream(req, onDelta, configError, abort.signal);
+      send(res.error ? { type: 'error', error: res.error } : { type: 'done', text: res.text ?? '' });
+    });
   });
 
   onMessage('backupStatus', async () => {
